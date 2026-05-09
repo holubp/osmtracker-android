@@ -20,6 +20,8 @@ import net.osmtracker.OSMTracker;
 import net.osmtracker.R;
 import net.osmtracker.db.DataHelper;
 import net.osmtracker.db.TrackContentProvider.Schema;
+import net.osmtracker.util.VoiceAudioRouter;
+import net.osmtracker.util.VoiceButtonPreferences;
 
 import java.io.File;
 import java.util.Date;
@@ -58,6 +60,10 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 	 * MediaRecorder used to record audio
 	 */
 	private MediaRecorder mediaRecorder;
+
+	private boolean recorderStarted = false;
+
+	private boolean isStopping = false;
 	
 	/**
 	 * MediaPlayer used to play a short beepbeep when recording starts
@@ -73,6 +79,8 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 	 * the context for this dialog
 	 */
 	private Context context;
+
+	private VoiceAudioRouter voiceAudioRouter;
 	
 	/**
 	 * saves the orientation at the time when the dialog was started
@@ -90,23 +98,20 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 	 */
 	private long dialogStartTime = 0;
 	
-	public VoiceRecDialog(Context context, long trackId) {
+	public VoiceRecDialog(Context context, long trackId, VoiceAudioRouter voiceAudioRouter) {
 		super(context);
 		this.context = context;
 		this.wayPointTrackId = trackId;
+		this.voiceAudioRouter = voiceAudioRouter;
 		
 		// Try to un-mute microphone, just in case
 		audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
 
 		this.setTitle(context.getResources().getString(R.string.tracklogger_voicerec_title));
 		
-		this.setButton(context.getResources().getString(R.string.tracklogger_voicerec_stop), new DialogInterface.OnClickListener() {
-			@Override
-			public void onClick(DialogInterface dialog, int which) {
-				mediaRecorder.stop();
-				VoiceRecDialog.this.dismiss();
-			}
-		});		
+		this.setButton(DialogInterface.BUTTON_NEGATIVE,
+				context.getResources().getString(R.string.tracklogger_voicerec_stop),
+				(DialogInterface.OnClickListener) null);
 	}
 	
 	
@@ -183,53 +188,32 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 					}
 				}
 
-				mediaRecorder = new MediaRecorder();
-				try {
-					// MediaRecorder configuration
-					mediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
-					mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP);
-					mediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB);
-					mediaRecorder.setOutputFile(audioFile.getAbsolutePath());
-					mediaRecorder.setMaxDuration(recordingDuration * 1000);
-					mediaRecorder.setOnInfoListener(this);
-	
-					Log.d(TAG, "onStart() starting mediaRecorder...");
-					mediaRecorder.prepare();
-					mediaRecorder.start();
-
-					if (mediaPlayerStart != null) {
-						// short "beep-beep" to notify that recording started
-						mediaPlayerStart.start();
+				String audioSource = VoiceAudioRouter.getAudioSource(preferences);
+				voiceAudioRouter.prepareForRecording(audioSource, new VoiceAudioRouter.Callback() {
+					@Override
+					public void onReady(boolean bluetoothActive) {
+						prepareMediaRecorder(audioFile, bluetoothActive);
 					}
-					
-					Log.d(TAG,"onStart() mediaRecorder started...");
-				} catch (Exception ioe) {
-					Log.w(TAG, "onStart() voice recording has failed", ioe);
-					this.dismiss();
-					Toast.makeText(context, context.getResources().getString(R.string.error_voicerec_failed),
-							Toast.LENGTH_SHORT).show();
-	
-				}
-	
-				// Still update waypoint, could be useful even without
-				// the voice file.
-				Intent intent = new Intent(OSMTracker.INTENT_UPDATE_WP);
-				intent.putExtra(Schema.COL_TRACK_ID, wayPointTrackId);
-				intent.putExtra(OSMTracker.INTENT_KEY_UUID, wayPointUuid);
-				intent.putExtra(OSMTracker.INTENT_KEY_LINK, audioFile.getName());
-				intent.setPackage(getContext().getPackageName());
-				context.sendBroadcast(intent);
+
+					@Override
+					public void onFailed() {
+						failRecording();
+					}
+				});
 			} else {
 				Log.w(TAG,"onStart() no suitable audioFile could be created");
 				// The audio file could not be created on the file system
 				// let the user know
-				Toast.makeText(context, 
-						context.getResources().getString(R.string.error_voicerec_failed),
-						Toast.LENGTH_SHORT).show();
+				failRecording();
 			}
 		}
 
 		super.onStart();
+
+		android.widget.Button stopButton = getButton(DialogInterface.BUTTON_NEGATIVE);
+		if (stopButton != null) {
+			stopButton.setOnClickListener(v -> stopRecording());
+		}
 	}
 	
 	@Override
@@ -239,13 +223,7 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 		case MediaRecorder.MEDIA_RECORDER_ERROR_UNKNOWN:
 		case MediaRecorder.MEDIA_RECORDER_INFO_MAX_FILESIZE_REACHED:
 		case MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED:
-			if (mediaPlayerStop != null) {
-				// short "beep" when we stop to record
-				mediaPlayerStop.start();
-			}
-			// MediaRecorder has been stopped by system
-			// we're done, so we can dismiss the dialog
-			this.dismiss();
+			stopRecording();
 			break;
 		}
 	}
@@ -260,9 +238,14 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 		safeClose(mediaRecorder, false);
 		safeClose(mediaPlayerStart);
 		safeClose(mediaPlayerStop);
+		mediaRecorder = null;
+		mediaPlayerStart = null;
+		mediaPlayerStop = null;
 		
 		wayPointUuid = null;
 		isRecording = false;
+		recorderStarted = false;
+		isStopping = false;
 		
 		try {
 			this.getOwnerActivity().setRequestedOrientation(currentRequestedOrientation);
@@ -282,13 +265,121 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 		if(event.getDownTime() > dialogStartTime){
 			switch (keyCode) {
 			case KeyEvent.KEYCODE_DPAD_CENTER:
-			case KeyEvent.KEYCODE_HEADSETHOOK:
 				// stop recording / dismiss the dialog
-				this.dismiss();
+				stopRecording();
 				return true;
+			default:
+				if (VoiceButtonPreferences.contains(
+						PreferenceManager.getDefaultSharedPreferences(context), keyCode)) {
+					stopRecording();
+					return true;
+				}
 			}
 		}
 		return super.onKeyDown(keyCode, event);
+	}
+
+	public boolean isRecording() {
+		return isRecording;
+	}
+
+	public void stopRecording() {
+		if (isStopping) {
+			return;
+		}
+
+		isStopping = true;
+		safeClose(mediaRecorder, recorderStarted);
+		mediaRecorder = null;
+		recorderStarted = false;
+
+		if (mediaPlayerStop != null) {
+			mediaPlayerStop.setOnCompletionListener(mp -> VoiceRecDialog.this.dismiss());
+			try {
+				mediaPlayerStop.start();
+				return;
+			} catch (Exception e) {
+				Log.w(TAG, "Failed to play stop sound", e);
+			}
+		}
+
+		VoiceRecDialog.this.dismiss();
+	}
+
+	private void prepareMediaRecorder(File audioFile, boolean bluetoothActive) {
+		if (!isRecording || isStopping) {
+			return;
+		}
+
+		mediaRecorder = new MediaRecorder();
+		try {
+			// MediaRecorder configuration
+			mediaRecorder.setAudioSource(bluetoothActive
+					? MediaRecorder.AudioSource.VOICE_COMMUNICATION
+					: MediaRecorder.AudioSource.MIC);
+			mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP);
+			mediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB);
+			mediaRecorder.setOutputFile(audioFile.getAbsolutePath());
+			mediaRecorder.setMaxDuration(recordingDuration * 1000);
+			mediaRecorder.setOnInfoListener(this);
+
+			Log.d(TAG, "onStart() preparing mediaRecorder...");
+			mediaRecorder.prepare();
+			playStartSound(() -> startMediaRecorder(audioFile));
+		} catch (Exception ioe) {
+			Log.w(TAG, "onStart() voice recording has failed", ioe);
+			failRecording();
+		}
+	}
+
+	private void startMediaRecorder(File audioFile) {
+		if (!isRecording || isStopping || mediaRecorder == null) {
+			return;
+		}
+
+		try {
+			Log.d(TAG, "onStart() starting mediaRecorder...");
+			mediaRecorder.start();
+			recorderStarted = true;
+			Log.d(TAG,"onStart() mediaRecorder started...");
+
+			Intent intent = new Intent(OSMTracker.INTENT_UPDATE_WP);
+			intent.putExtra(Schema.COL_TRACK_ID, wayPointTrackId);
+			intent.putExtra(OSMTracker.INTENT_KEY_UUID, wayPointUuid);
+			intent.putExtra(OSMTracker.INTENT_KEY_LINK, audioFile.getName());
+			intent.setPackage(getContext().getPackageName());
+			context.sendBroadcast(intent);
+		} catch (Exception e) {
+			Log.w(TAG, "onStart() voice recording has failed", e);
+			failRecording();
+		}
+	}
+
+	private void playStartSound(Runnable afterSound) {
+		if (mediaPlayerStart == null) {
+			afterSound.run();
+			return;
+		}
+
+		mediaPlayerStart.setOnCompletionListener(mp -> {
+			safeClose(mediaPlayerStart);
+			mediaPlayerStart = null;
+			afterSound.run();
+		});
+		try {
+			mediaPlayerStart.start();
+		} catch (Exception e) {
+			Log.w(TAG, "Failed to play start sound", e);
+			safeClose(mediaPlayerStart);
+			mediaPlayerStart = null;
+			afterSound.run();
+		}
+	}
+
+	private void failRecording() {
+		Toast.makeText(context, context.getResources().getString(R.string.error_voicerec_failed),
+				Toast.LENGTH_SHORT).show();
+		VoiceRecDialog.this.dismiss();
 	}
 
 	

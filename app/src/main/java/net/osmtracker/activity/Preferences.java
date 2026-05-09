@@ -1,9 +1,14 @@
 package net.osmtracker.activity;
 
+import android.content.ComponentName;
+import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.media.AudioManager;
 import android.os.Bundle;
 import android.text.TextUtils;
+import android.view.KeyEvent;
 import android.widget.Button;
 import android.widget.Toast;
 
@@ -20,9 +25,11 @@ import androidx.preference.PreferenceManager;
 
 import net.osmtracker.OSMTracker;
 import net.osmtracker.R;
+import net.osmtracker.receiver.MediaButtonReceiver;
+import net.osmtracker.util.VoiceButtonPreferences;
 
 import java.io.File;
-import java.util.Objects;
+import java.util.Set;
 
 /**
  * Manages preferences screen
@@ -57,6 +64,11 @@ public class Preferences extends AppCompatActivity {
 
 			// General settings
 			setupVoiceRecDuration();
+			setupListPreference(
+					OSMTracker.Preferences.KEY_VOICEREC_AUDIO_SOURCE,
+					getString(R.string.prefs_voicerec_audio_source_summary)
+			);
+			setupVoiceButtons(prefs);
 			// Notes
 			setupListPreference(
 					OSMTracker.Preferences.KEY_USE_NOTES,
@@ -193,6 +205,92 @@ public class Preferences extends AppCompatActivity {
 						return preference.getEntry() + " "
 								+ getString(R.string.prefs_voicerec_duration_seconds);
 					});
+		}
+
+		private void setupVoiceButtons(SharedPreferences prefs) {
+			Preference voiceButtons = findPreference(OSMTracker.Preferences.KEY_VOICEREC_BUTTONS);
+
+			if (voiceButtons == null) return;
+
+			voiceButtons.setSummary(getVoiceButtonsSummary(prefs));
+			voiceButtons.setOnPreferenceClickListener(preference -> {
+				showVoiceButtonDialog(prefs, preference);
+				return true;
+			});
+		}
+
+		private String getVoiceButtonsSummary(SharedPreferences prefs) {
+			Set<Integer> keyCodes = VoiceButtonPreferences.getKeyCodes(prefs);
+			if (keyCodes.isEmpty()) {
+				return getString(R.string.prefs_voicerec_buttons_none);
+			}
+			if (keyCodes.size() > 3) {
+				return getString(R.string.prefs_voicerec_buttons_count, keyCodes.size());
+			}
+
+			StringBuilder summary = new StringBuilder();
+			for (int keyCode : keyCodes) {
+				if (summary.length() > 0) {
+					summary.append(", ");
+				}
+				summary.append(VoiceButtonPreferences.getDisplayName(keyCode));
+			}
+			return summary.toString();
+		}
+
+		private void showVoiceButtonDialog(SharedPreferences prefs, Preference preference) {
+			AudioManager audioManager =
+					(AudioManager) requireContext().getSystemService(Context.AUDIO_SERVICE);
+			ComponentName receiver = new ComponentName(requireContext(), MediaButtonReceiver.class);
+
+			AlertDialog dialog = new AlertDialog.Builder(requireContext())
+					.setTitle(R.string.prefs_voicerec_buttons_dialog_title)
+					.setMessage(R.string.prefs_voicerec_buttons_dialog_message)
+					.setNegativeButton(android.R.string.cancel, null)
+					.setNeutralButton(R.string.prefs_voicerec_buttons_clear, null)
+					.create();
+
+			MediaButtonReceiver.MediaButtonListener captureListener = event -> {
+				if (event.getAction() != KeyEvent.ACTION_DOWN) {
+					return true;
+				}
+				addVoiceButton(prefs, preference, dialog, event.getKeyCode());
+				return true;
+			};
+
+			dialog.setOnKeyListener((DialogInterface dialogInterface, int keyCode, KeyEvent event) -> {
+				if (event.getAction() != KeyEvent.ACTION_DOWN) {
+					return true;
+				}
+				addVoiceButton(prefs, preference, dialog, keyCode);
+				return true;
+			});
+			dialog.setOnShowListener(dialogInterface -> {
+				MediaButtonReceiver.setCaptureListener(captureListener);
+				if (audioManager != null) {
+					audioManager.registerMediaButtonEventReceiver(receiver);
+				}
+				dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v -> {
+					VoiceButtonPreferences.clear(prefs);
+					preference.setSummary(getVoiceButtonsSummary(prefs));
+				});
+			});
+			dialog.setOnDismissListener(dialogInterface -> {
+				MediaButtonReceiver.setCaptureListener(null);
+				if (audioManager != null) {
+					audioManager.unregisterMediaButtonEventReceiver(receiver);
+				}
+			});
+			dialog.show();
+		}
+
+		private void addVoiceButton(SharedPreferences prefs, Preference preference,
+									AlertDialog dialog, int keyCode) {
+			VoiceButtonPreferences.add(prefs, keyCode);
+			preference.setSummary(getVoiceButtonsSummary(prefs));
+			String keyName = VoiceButtonPreferences.getDisplayName(keyCode);
+			dialog.setMessage(getString(R.string.prefs_voicerec_buttons_added, keyName)
+					+ "\n\n" + getVoiceButtonsSummary(prefs));
 		}
 
 		/**

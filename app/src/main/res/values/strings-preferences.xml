@@ -51,6 +51,21 @@
   </string-array>
   <string name="prefs_voicerec_duration">Voice record duration</string>
   <string name="prefs_voicerec_duration_seconds">seconds</string>
+  <string name="prefs_voicerec_audio_source">Voice recording microphone</string>
+  <string name="prefs_voicerec_audio_source_summary">Choose which microphone is used for voice recordings</string>
+  <string-array name="prefs_voicerec_audio_source_keys">
+    <item>Phone microphone</item>
+    <item>Prefer Bluetooth headset</item>
+    <item>Require Bluetooth headset</item>
+  </string-array>
+  <string name="prefs_voicerec_buttons">Headset voice button</string>
+  <string name="prefs_voicerec_buttons_summary">Disabled</string>
+  <string name="prefs_voicerec_buttons_dialog_title">Headset voice button</string>
+  <string name="prefs_voicerec_buttons_dialog_message">Press a headset button to add it. Added buttons toggle voice recording while a track is being recorded.</string>
+  <string name="prefs_voicerec_buttons_clear">Clear</string>
+  <string name="prefs_voicerec_buttons_added">Added %s</string>
+  <string name="prefs_voicerec_buttons_none">Disabled</string>
+  <string name="prefs_voicerec_buttons_count">%d configured</string>
   <string name="prefs_theme">Main screen graphic theme</string>
   <string name="prefs_theme_summary">Application restart required for change to take effect</string>
   <string-array name="prefs_theme_keys">

@@ -19,6 +19,7 @@ import android.location.LocationManager;
 import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Build;
 import android.os.StrictMode;
 import android.provider.MediaStore;
 import android.provider.Settings;
@@ -51,6 +52,8 @@ import net.osmtracker.service.gps.GPSLoggerServiceConnection;
 import net.osmtracker.util.CustomLayoutsUtils;
 import net.osmtracker.util.FileSystemUtils;
 import net.osmtracker.util.ThemeValidator;
+import net.osmtracker.util.VoiceAudioRouter;
+import net.osmtracker.util.VoiceButtonPreferences;
 import net.osmtracker.view.TextNoteDialog;
 import net.osmtracker.view.VoiceRecDialog;
 
@@ -71,7 +74,8 @@ public class TrackLogger extends Activity {
 
 	private static final String TAG = TrackLogger.class.getSimpleName();
 
-	final private int RC_STORAGE_AUDIO_PERMISSIONS = 1;
+	private static final int RC_AUDIO_PERMISSIONS = 1;
+	private static final int RC_BLUETOOTH_CONNECT_PERMISSION = 2;
 
 	/**
 	 * Request code for callback after the camera application had taken a
@@ -170,6 +174,10 @@ public class TrackLogger extends Activity {
 
 	private ComponentName mediaButtonReceiver;
 
+	private VoiceAudioRouter voiceAudioRouter;
+
+	private VoiceRecDialog voiceRecDialog;
+
 
 	/*
 	 *  Avoid taking care of duplicated elements
@@ -224,6 +232,7 @@ public class TrackLogger extends Activity {
 		
 		mAudioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
 		mediaButtonReceiver = new ComponentName(this, MediaButtonReceiver.class.getName());
+		voiceAudioRouter = new VoiceAudioRouter(this);
 	}
 
 	/**
@@ -355,7 +364,11 @@ public class TrackLogger extends Activity {
 			Toast.makeText(this, R.string.tracklogger_waiting_gps, Toast.LENGTH_LONG).show();
 		}
 
-		mAudioManager.registerMediaButtonEventReceiver(mediaButtonReceiver);
+		if (!VoiceButtonPreferences.getKeyCodes(prefs).isEmpty()) {
+			mAudioManager.registerMediaButtonEventReceiver(mediaButtonReceiver);
+			MediaButtonReceiver.setActiveListener(this::handleMediaButton);
+		}
+		voiceAudioRouter.startTracking(prefs);
 
 		//save the layout file name if it change, in tags array
 		String layoutName = CustomLayoutsUtils.getCurrentLayoutName(getApplicationContext());
@@ -412,6 +425,8 @@ public class TrackLogger extends Activity {
 		}
 
 		mAudioManager.unregisterMediaButtonEventReceiver(mediaButtonReceiver);
+		MediaButtonReceiver.setActiveListener(null);
+		voiceAudioRouter.stopTracking();
 
 		super.onPause();
 	}
@@ -473,6 +488,7 @@ public class TrackLogger extends Activity {
 		case R.id.tracklogger_menu_stoptracking:
 			// Start / Stop tracking	
 			if (gpsLogger.isTracking()) {
+				voiceAudioRouter.stopTracking();
 				saveTagsForTrack();
 
 				Intent intent = new Intent(OSMTracker.INTENT_STOP_TRACKING);
@@ -534,13 +550,16 @@ public class TrackLogger extends Activity {
 			// API Level 3 doesn't support long presses, so we need to do this manually
 			if((gpsLogger != null && gpsLogger.isTracking()) && (event.getEventTime() - event.getDownTime()) > OSMTracker.LONG_PRESS_TIME){
 				// new long press of dpad center detected, start voice recording dialog
-				this.showDialog(DIALOG_VOICE_RECORDING);
+				startVoiceRecording();
 				return true;
 			}
 			break;
-		case KeyEvent.KEYCODE_HEADSETHOOK:
-			if (gpsLogger != null && gpsLogger.isTracking()){
-				this.showDialog(DIALOG_VOICE_RECORDING);
+		default:
+			if (event.getRepeatCount() == 0
+					&& gpsLogger != null
+					&& gpsLogger.isTracking()
+					&& VoiceButtonPreferences.contains(prefs, keyCode)) {
+				toggleVoiceRecording();
 				return true;
 			}
 		}
@@ -695,33 +714,8 @@ public class TrackLogger extends Activity {
 			// create a new TextNoteDialog
 			return new TextNoteDialog(this, currentTrackId);
 		case DIALOG_VOICE_RECORDING:
-			if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-					!= PackageManager.PERMISSION_GRANTED) {
-
-				// Should we show an explanation?
-				if ( (ActivityCompat.shouldShowRequestPermissionRationale(this,
-						Manifest.permission.RECORD_AUDIO)) ) {
-
-					// Show an expanation to the user *asynchronously* -- don't block
-					// this thread waiting for the user's response! After the user
-					// sees the explanation, try again to request the permission.
-					// TODO: explain why we need permission.
-					Log.w(TAG, "we should explain why we need write and record audio permission");
-
-				} else {
-
-					// No explanation needed, we can request the permission.
-					ActivityCompat.requestPermissions(this,
-							new String[]{
-										 Manifest.permission.RECORD_AUDIO},
-							RC_STORAGE_AUDIO_PERMISSIONS);
-					break;
-				}
-
-			} else {
-				// create a new VoiceRegDialog
-				return new VoiceRecDialog(this, currentTrackId);
-			}
+			voiceRecDialog = new VoiceRecDialog(this, currentTrackId, voiceAudioRouter);
+			return voiceRecDialog;
 		}
 		return super.onCreateDialog(id);
 	}
@@ -737,6 +731,83 @@ public class TrackLogger extends Activity {
 		}
 		super.onPrepareDialog(id, dialog);
 	}
+
+	public void startVoiceRecording() {
+		if (gpsLogger == null || !gpsLogger.isTracking()) {
+			return;
+		}
+
+		if (!hasVoiceRecordingPermissions()) {
+			requestVoiceRecordingPermissions();
+			return;
+		}
+
+		this.showDialog(DIALOG_VOICE_RECORDING);
+	}
+
+	public void toggleVoiceRecording() {
+		if (voiceRecDialog != null && voiceRecDialog.isRecording()) {
+			voiceRecDialog.stopRecording();
+		} else {
+			startVoiceRecording();
+		}
+	}
+
+	private boolean handleMediaButton(KeyEvent event) {
+		if (event.getAction() != KeyEvent.ACTION_UP
+				|| gpsLogger == null
+				|| !gpsLogger.isTracking()
+				|| !VoiceButtonPreferences.contains(prefs, event.getKeyCode())) {
+			return false;
+		}
+
+		toggleVoiceRecording();
+		return true;
+	}
+
+	private boolean hasVoiceRecordingPermissions() {
+		if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+				!= PackageManager.PERMISSION_GRANTED) {
+			return false;
+		}
+
+		return !VoiceAudioRouter.requiresBluetoothPermission(prefs)
+				|| VoiceAudioRouter.hasBluetoothPermission(this);
+	}
+
+	private void requestVoiceRecordingPermissions() {
+		if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+				!= PackageManager.PERMISSION_GRANTED) {
+			ActivityCompat.requestPermissions(this,
+					new String[]{Manifest.permission.RECORD_AUDIO},
+					RC_AUDIO_PERMISSIONS);
+			return;
+		}
+
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+				&& VoiceAudioRouter.requiresBluetoothPermission(prefs)
+				&& !VoiceAudioRouter.hasBluetoothPermission(this)) {
+			ActivityCompat.requestPermissions(this,
+					new String[]{Manifest.permission.BLUETOOTH_CONNECT},
+					RC_BLUETOOTH_CONNECT_PERMISSION);
+		}
+	}
+
+	@Override
+	public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
+										   @NonNull int[] grantResults) {
+		super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+		switch (requestCode) {
+		case RC_AUDIO_PERMISSIONS:
+		case RC_BLUETOOTH_CONNECT_PERMISSION:
+			if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+				startVoiceRecording();
+			} else {
+				Toast.makeText(this, R.string.error_voicerec_failed, Toast.LENGTH_SHORT).show();
+			}
+			break;
+		}
+	}
 	
 	@Override
 	protected void onNewIntent(Intent newIntent) {
@@ -744,9 +815,6 @@ public class TrackLogger extends Activity {
 			if (newIntent.getExtras().containsKey(TrackContentProvider.Schema.COL_TRACK_ID)) {
 				currentTrackId = newIntent.getExtras().getLong(TrackContentProvider.Schema.COL_TRACK_ID);
 				setIntent(newIntent);
-			}
-			if (newIntent.hasExtra("mediaButton") && gpsLogger != null && gpsLogger.isTracking()) {
-				this.showDialog(DIALOG_VOICE_RECORDING);
 			}
 		}
 		super.onNewIntent(newIntent);
@@ -784,31 +852,6 @@ public class TrackLogger extends Activity {
         galleryIntent.setType(DataHelper.MIME_TYPE_IMAGE);
         galleryIntent.setAction(Intent.ACTION_GET_CONTENT);
 		startActivityForResult(galleryIntent, REQCODE_GALLERY_CHOSEN);
-	}
-
-	public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
-										   @NonNull int[] grantResults) {
-		switch (requestCode) {
-			case RC_STORAGE_AUDIO_PERMISSIONS: {
-				// If request is cancelled, the result arrays are empty.
-				if (grantResults.length > 1) {
-						// TODO: fix permission management
-						//&& grantResults[0] == PackageManager.PERMISSION_GRANTED
-						//&& grantResults[1] == PackageManager.PERMISSION_GRANTED) {
-
-					// permission was granted, yay!
-					new VoiceRecDialog(this, currentTrackId);
-
-				} else {
-
-					// permission denied, boo! Disable the
-					// functionality that depends on this permission.
-					//TODO: add an informative message.
-					Log.v(TAG, "Voice recording permission is denied.");
-				}
-				return;
-			}
-		}
 	}
 
 }

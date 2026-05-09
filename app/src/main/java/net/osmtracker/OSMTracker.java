@@ -17,6 +17,8 @@ public class OSMTracker {
 		// Property names
 		public final static String KEY_STORAGE_DIR = "logging.storage.dir";
 		public final static String KEY_VOICEREC_DURATION = "voicerec.duration";
+		public final static String KEY_VOICEREC_AUDIO_SOURCE = "voicerec.audio_source";
+		public final static String KEY_VOICEREC_BUTTONS = "voicerec.buttons";
 		public final static String KEY_UI_THEME = "ui.theme";
 		public final static String KEY_GPS_OSSETTINGS = "gps.ossettings";
 		public final static String KEY_GPS_CHECKSTARTUP = "gps.checkstartup";
@@ -56,6 +58,10 @@ public class OSMTracker {
 		// Default values
 		public final static String VAL_STORAGE_DIR = "/osmtracker";
 		public final static String VAL_VOICEREC_DURATION = "2";
+		public final static String VAL_VOICEREC_AUDIO_SOURCE_PHONE = "phone";
+		public final static String VAL_VOICEREC_AUDIO_SOURCE_BLUETOOTH_PREFERRED = "bluetooth_preferred";
+		public final static String VAL_VOICEREC_AUDIO_SOURCE_BLUETOOTH_REQUIRED = "bluetooth_required";
+		public final static String VAL_VOICEREC_AUDIO_SOURCE = VAL_VOICEREC_AUDIO_SOURCE_PHONE;
 		public final static String VAL_UI_THEME = "net.osmtracker:style/DefaultTheme";
 		public final static boolean VAL_GPS_CHECKSTARTUP = true;
 		public final static boolean VAL_GPS_IGNORE_CLOCK = false;

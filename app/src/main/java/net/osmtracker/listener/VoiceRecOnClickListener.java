@@ -24,7 +24,7 @@ public class VoiceRecOnClickListener implements OnClickListener{
 
 	@Override
 	public void onClick(View v) {
-		tl.showDialog(TrackLogger.DIALOG_VOICE_RECORDING);
+		tl.startVoiceRecording();
 	}
 
 }

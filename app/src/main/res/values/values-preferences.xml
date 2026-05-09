@@ -23,6 +23,12 @@
 		<item>30</item>
 	</string-array>
 
+	<string-array name="prefs_voicerec_audio_source_values">
+		<item>phone</item>
+		<item>bluetooth_preferred</item>
+		<item>bluetooth_required</item>
+	</string-array>
+
 	<string-array name="prefs_theme_values">
 		<item>net.osmtracker:style/DefaultTheme</item>
 		<item>net.osmtracker:style/DarkTheme</item>

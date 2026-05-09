@@ -4,7 +4,6 @@ import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
-import android.content.ComponentName;
 import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
@@ -16,7 +15,6 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.location.LocationManager;
-import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Build;
@@ -53,6 +51,7 @@ import net.osmtracker.util.CustomLayoutsUtils;
 import net.osmtracker.util.FileSystemUtils;
 import net.osmtracker.util.ThemeValidator;
 import net.osmtracker.util.VoiceAudioRouter;
+import net.osmtracker.util.VoiceButtonMediaSession;
 import net.osmtracker.util.VoiceButtonPreferences;
 import net.osmtracker.view.TextNoteDialog;
 import net.osmtracker.view.VoiceRecDialog;
@@ -170,11 +169,9 @@ public class TrackLogger extends Activity {
 	 */
 	private PressureListener pressureListener;
 
-	private AudioManager mAudioManager;
-
-	private ComponentName mediaButtonReceiver;
-
 	private VoiceAudioRouter voiceAudioRouter;
+
+	private VoiceButtonMediaSession voiceButtonMediaSession;
 
 	private VoiceRecDialog voiceRecDialog;
 
@@ -230,8 +227,6 @@ public class TrackLogger extends Activity {
 		// create pressure listener
 		pressureListener = new PressureListener();
 		
-		mAudioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-		mediaButtonReceiver = new ComponentName(this, MediaButtonReceiver.class.getName());
 		voiceAudioRouter = new VoiceAudioRouter(this);
 	}
 
@@ -365,8 +360,10 @@ public class TrackLogger extends Activity {
 		}
 
 		if (!VoiceButtonPreferences.getKeyCodes(prefs).isEmpty()) {
-			mAudioManager.registerMediaButtonEventReceiver(mediaButtonReceiver);
 			MediaButtonReceiver.setActiveListener(this::handleMediaButton);
+			voiceButtonMediaSession = new VoiceButtonMediaSession(
+					this, "OSMTracker voice button", this::handleMediaButton);
+			voiceButtonMediaSession.start();
 		}
 		voiceAudioRouter.startTracking(prefs);
 
@@ -424,8 +421,11 @@ public class TrackLogger extends Activity {
 			pressureListener.unregister();
 		}
 
-		mAudioManager.unregisterMediaButtonEventReceiver(mediaButtonReceiver);
 		MediaButtonReceiver.setActiveListener(null);
+		if (voiceButtonMediaSession != null) {
+			voiceButtonMediaSession.stop();
+			voiceButtonMediaSession = null;
+		}
 		voiceAudioRouter.stopTracking();
 
 		super.onPause();

@@ -1,11 +1,8 @@
 package net.osmtracker.activity;
 
-import android.content.ComponentName;
-import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.media.AudioManager;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.KeyEvent;
@@ -26,6 +23,7 @@ import androidx.preference.PreferenceManager;
 import net.osmtracker.OSMTracker;
 import net.osmtracker.R;
 import net.osmtracker.receiver.MediaButtonReceiver;
+import net.osmtracker.util.VoiceButtonMediaSession;
 import net.osmtracker.util.VoiceButtonPreferences;
 
 import java.io.File;
@@ -239,10 +237,6 @@ public class Preferences extends AppCompatActivity {
 		}
 
 		private void showVoiceButtonDialog(SharedPreferences prefs, Preference preference) {
-			AudioManager audioManager =
-					(AudioManager) requireContext().getSystemService(Context.AUDIO_SERVICE);
-			ComponentName receiver = new ComponentName(requireContext(), MediaButtonReceiver.class);
-
 			AlertDialog dialog = new AlertDialog.Builder(requireContext())
 					.setTitle(R.string.prefs_voicerec_buttons_dialog_title)
 					.setMessage(R.string.prefs_voicerec_buttons_dialog_message)
@@ -257,6 +251,8 @@ public class Preferences extends AppCompatActivity {
 				addVoiceButton(prefs, preference, dialog, event.getKeyCode());
 				return true;
 			};
+			VoiceButtonMediaSession mediaSession = new VoiceButtonMediaSession(
+					requireContext(), "OSMTracker voice button capture", captureListener);
 
 			dialog.setOnKeyListener((DialogInterface dialogInterface, int keyCode, KeyEvent event) -> {
 				if (event.getAction() != KeyEvent.ACTION_DOWN) {
@@ -267,9 +263,7 @@ public class Preferences extends AppCompatActivity {
 			});
 			dialog.setOnShowListener(dialogInterface -> {
 				MediaButtonReceiver.setCaptureListener(captureListener);
-				if (audioManager != null) {
-					audioManager.registerMediaButtonEventReceiver(receiver);
-				}
+				mediaSession.start();
 				dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v -> {
 					VoiceButtonPreferences.clear(prefs);
 					preference.setSummary(getVoiceButtonsSummary(prefs));
@@ -277,9 +271,7 @@ public class Preferences extends AppCompatActivity {
 			});
 			dialog.setOnDismissListener(dialogInterface -> {
 				MediaButtonReceiver.setCaptureListener(null);
-				if (audioManager != null) {
-					audioManager.unregisterMediaButtonEventReceiver(receiver);
-				}
+				mediaSession.stop();
 			});
 			dialog.show();
 		}

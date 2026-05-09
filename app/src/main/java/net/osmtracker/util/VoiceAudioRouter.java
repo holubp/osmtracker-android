@@ -167,6 +167,7 @@ public class VoiceAudioRouter {
 				return;
 			}
 
+			audioManager.clearCommunicationDevice();
 			audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
 			if (audioManager.setCommunicationDevice(device)) {
 				bluetoothActive = true;
@@ -195,12 +196,6 @@ public class VoiceAudioRouter {
 	}
 
 	private void prepareBluetoothSco(String source, Callback callback) {
-		if (audioManager.isBluetoothScoOn()) {
-			bluetoothActive = true;
-			callback.onReady(true);
-			return;
-		}
-
 		pendingCallback = callback;
 		registerScoReceiver();
 		pendingTimeout = () -> {
@@ -211,6 +206,8 @@ public class VoiceAudioRouter {
 		handler.postDelayed(pendingTimeout, BLUETOOTH_SCO_TIMEOUT_MS);
 
 		try {
+			audioManager.setBluetoothScoOn(false);
+			audioManager.stopBluetoothSco();
 			audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
 			audioManager.startBluetoothSco();
 			audioManager.setBluetoothScoOn(true);

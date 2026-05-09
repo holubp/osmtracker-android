@@ -15,6 +15,8 @@ public class VoiceButtonMediaSession {
 	public VoiceButtonMediaSession(Context context, String tag,
 								   MediaButtonReceiver.MediaButtonListener listener) {
 		mediaSession = new MediaSession(context.getApplicationContext(), tag);
+		mediaSession.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS
+				| MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
 		mediaSession.setCallback(new MediaSession.Callback() {
 			@Override
 			public boolean onMediaButtonEvent(Intent mediaButtonIntent) {
@@ -49,8 +51,13 @@ public class VoiceButtonMediaSession {
 
 			private void handleTransportKey(int keyCode) {
 				listener.onMediaButton(new KeyEvent(KeyEvent.ACTION_DOWN, keyCode));
+				refreshPlaybackState();
 			}
 		});
+		refreshPlaybackState();
+	}
+
+	private void refreshPlaybackState() {
 		mediaSession.setPlaybackState(new PlaybackState.Builder()
 				.setActions(PlaybackState.ACTION_PLAY
 						| PlaybackState.ACTION_PAUSE

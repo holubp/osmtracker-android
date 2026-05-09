@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.res.AssetFileDescriptor;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.media.MediaRecorder;
@@ -74,6 +75,8 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 	 * MediaPlayer used to play a short beep when recording stops
 	 */
 	private MediaPlayer mediaPlayerStop = null;
+
+	private boolean playSound = false;
 	
 	/**
 	 * the context for this dialog
@@ -170,23 +173,11 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 
 			if (audioFile != null) {
 
-				boolean playSound = preferences.getBoolean(OSMTracker.Preferences.KEY_SOUND_ENABLED,
+				playSound = preferences.getBoolean(OSMTracker.Preferences.KEY_SOUND_ENABLED,
 						OSMTracker.Preferences.VAL_SOUND_ENABLED);
 
 				// Some workaround for record problems
 				unMuteMicrophone();
-				
-				// prepare the media players		
-				if (playSound) {
-					mediaPlayerStart = MediaPlayer.create(context, R.raw.beepbeep);
-					if (mediaPlayerStart != null) {
-						mediaPlayerStart.setLooping(false);
-					}
-					mediaPlayerStop = MediaPlayer.create(context, R.raw.beep);
-					if (mediaPlayerStop != null) {
-						mediaPlayerStop.setLooping(false);
-					}
-				}
 
 				String audioSource = VoiceAudioRouter.getAudioSource(preferences);
 				voiceAudioRouter.prepareForRecording(audioSource, new VoiceAudioRouter.Callback() {
@@ -246,6 +237,7 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 		isRecording = false;
 		recorderStarted = false;
 		isStopping = false;
+		playSound = false;
 		
 		try {
 			this.getOwnerActivity().setRequestedOrientation(currentRequestedOrientation);
@@ -313,6 +305,7 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 
 		mediaRecorder = new MediaRecorder();
 		try {
+			prepareMediaPlayers(bluetoothActive);
 			// MediaRecorder configuration
 			mediaRecorder.setAudioSource(bluetoothActive
 					? MediaRecorder.AudioSource.VOICE_COMMUNICATION
@@ -380,6 +373,42 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 		Toast.makeText(context, context.getResources().getString(R.string.error_voicerec_failed),
 				Toast.LENGTH_SHORT).show();
 		VoiceRecDialog.this.dismiss();
+	}
+
+	private void prepareMediaPlayers(boolean bluetoothActive) {
+		if (!playSound) {
+			return;
+		}
+
+		mediaPlayerStart = createSoundPlayer(R.raw.beepbeep, bluetoothActive);
+		mediaPlayerStop = createSoundPlayer(R.raw.beep, bluetoothActive);
+	}
+
+	private MediaPlayer createSoundPlayer(int resId, boolean bluetoothActive) {
+		MediaPlayer mediaPlayer = new MediaPlayer();
+		AssetFileDescriptor afd = null;
+		try {
+			afd = context.getResources().openRawResourceFd(resId);
+			mediaPlayer.setAudioStreamType(bluetoothActive
+					? AudioManager.STREAM_VOICE_CALL
+					: AudioManager.STREAM_MUSIC);
+			mediaPlayer.setDataSource(afd.getFileDescriptor(), afd.getStartOffset(), afd.getLength());
+			mediaPlayer.setLooping(false);
+			mediaPlayer.prepare();
+			return mediaPlayer;
+		} catch (Exception e) {
+			Log.w(TAG, "Failed to prepare sound player", e);
+			safeClose(mediaPlayer);
+			return null;
+		} finally {
+			if (afd != null) {
+				try {
+					afd.close();
+				} catch (Exception ignored) {
+					// Nothing useful to do here.
+				}
+			}
+		}
 	}
 
 	

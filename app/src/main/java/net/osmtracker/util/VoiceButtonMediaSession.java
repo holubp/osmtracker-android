@@ -21,6 +21,35 @@ public class VoiceButtonMediaSession {
 				KeyEvent event = mediaButtonIntent.getParcelableExtra(Intent.EXTRA_KEY_EVENT);
 				return event != null && listener.onMediaButton(event);
 			}
+
+			@Override
+			public void onPlay() {
+				handleTransportKey(KeyEvent.KEYCODE_MEDIA_PLAY);
+			}
+
+			@Override
+			public void onPause() {
+				handleTransportKey(KeyEvent.KEYCODE_MEDIA_PAUSE);
+			}
+
+			@Override
+			public void onSkipToNext() {
+				handleTransportKey(KeyEvent.KEYCODE_MEDIA_NEXT);
+			}
+
+			@Override
+			public void onSkipToPrevious() {
+				handleTransportKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS);
+			}
+
+			@Override
+			public void onStop() {
+				handleTransportKey(KeyEvent.KEYCODE_MEDIA_STOP);
+			}
+
+			private void handleTransportKey(int keyCode) {
+				listener.onMediaButton(new KeyEvent(KeyEvent.ACTION_DOWN, keyCode));
+			}
 		});
 		mediaSession.setPlaybackState(new PlaybackState.Builder()
 				.setActions(PlaybackState.ACTION_PLAY

@@ -754,7 +754,8 @@ public class TrackLogger extends Activity {
 	}
 
 	private boolean handleMediaButton(KeyEvent event) {
-		if (event.getAction() != KeyEvent.ACTION_UP
+		if (event.getAction() != KeyEvent.ACTION_DOWN
+				|| event.getRepeatCount() != 0
 				|| gpsLogger == null
 				|| !gpsLogger.isTracking()
 				|| !VoiceButtonPreferences.contains(prefs, event.getKeyCode())) {

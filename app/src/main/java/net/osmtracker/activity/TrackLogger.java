@@ -44,14 +44,12 @@ import net.osmtracker.layout.GpsStatusRecord;
 import net.osmtracker.layout.UserDefinedLayout;
 import net.osmtracker.listener.PressureListener;
 import net.osmtracker.listener.SensorListener;
-import net.osmtracker.receiver.MediaButtonReceiver;
 import net.osmtracker.service.gps.GPSLogger;
 import net.osmtracker.service.gps.GPSLoggerServiceConnection;
 import net.osmtracker.util.CustomLayoutsUtils;
 import net.osmtracker.util.FileSystemUtils;
 import net.osmtracker.util.ThemeValidator;
 import net.osmtracker.util.VoiceAudioRouter;
-import net.osmtracker.util.VoiceButtonMediaSession;
 import net.osmtracker.util.VoiceButtonPreferences;
 import net.osmtracker.view.TextNoteDialog;
 import net.osmtracker.view.VoiceRecDialog;
@@ -170,8 +168,6 @@ public class TrackLogger extends Activity {
 	private PressureListener pressureListener;
 
 	private VoiceAudioRouter voiceAudioRouter;
-
-	private VoiceButtonMediaSession voiceButtonMediaSession;
 
 	private VoiceRecDialog voiceRecDialog;
 
@@ -359,12 +355,6 @@ public class TrackLogger extends Activity {
 			Toast.makeText(this, R.string.tracklogger_waiting_gps, Toast.LENGTH_LONG).show();
 		}
 
-		if (!VoiceButtonPreferences.getKeyCodes(prefs).isEmpty()) {
-			MediaButtonReceiver.setActiveListener(this::handleMediaButton);
-			voiceButtonMediaSession = new VoiceButtonMediaSession(
-					this, "OSMTracker voice button", this::handleMediaButton);
-			voiceButtonMediaSession.start();
-		}
 		voiceAudioRouter.startTracking(prefs);
 
 		//save the layout file name if it change, in tags array
@@ -421,11 +411,6 @@ public class TrackLogger extends Activity {
 			pressureListener.unregister();
 		}
 
-		MediaButtonReceiver.setActiveListener(null);
-		if (voiceButtonMediaSession != null) {
-			voiceButtonMediaSession.stop();
-			voiceButtonMediaSession = null;
-		}
 		voiceAudioRouter.stopTracking();
 
 		super.onPause();
@@ -527,6 +512,14 @@ public class TrackLogger extends Activity {
 		}
 		return super.onOptionsItemSelected(item);
 	}
+
+	@Override
+	public boolean dispatchKeyEvent(KeyEvent event) {
+		if (handleVoiceButton(event)) {
+			return true;
+		}
+		return super.dispatchKeyEvent(event);
+	}
 	
 	@Override
 	public boolean onKeyDown(int keyCode, KeyEvent event) {
@@ -555,11 +548,7 @@ public class TrackLogger extends Activity {
 			}
 			break;
 		default:
-			if (event.getRepeatCount() == 0
-					&& gpsLogger != null
-					&& gpsLogger.isTracking()
-					&& VoiceButtonPreferences.contains(prefs, keyCode)) {
-				toggleVoiceRecording();
+			if (handleVoiceButton(event)) {
 				return true;
 			}
 		}
@@ -753,7 +742,7 @@ public class TrackLogger extends Activity {
 		}
 	}
 
-	private boolean handleMediaButton(KeyEvent event) {
+	private boolean handleVoiceButton(KeyEvent event) {
 		if (event.getAction() != KeyEvent.ACTION_DOWN
 				|| event.getRepeatCount() != 0
 				|| gpsLogger == null

@@ -252,23 +252,37 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 	 * @see android.app.AlertDialog#onKeyDown(int, android.view.KeyEvent)
 	 */
 	@Override
+	public boolean dispatchKeyEvent(KeyEvent event) {
+		if (handleStopKey(event)) {
+			return true;
+		}
+		return super.dispatchKeyEvent(event);
+	}
+
+	@Override
 	public boolean onKeyDown(int keyCode, KeyEvent event) {
-		// only handle this event if it was raised after the dialog was shown
-		if(event.getDownTime() > dialogStartTime){
-			switch (keyCode) {
-			case KeyEvent.KEYCODE_DPAD_CENTER:
-				// stop recording / dismiss the dialog
-				stopRecording();
-				return true;
-			default:
-				if (VoiceButtonPreferences.contains(
-						PreferenceManager.getDefaultSharedPreferences(context), keyCode)) {
-					stopRecording();
-					return true;
-				}
-			}
+		if (handleStopKey(event)) {
+			return true;
 		}
 		return super.onKeyDown(keyCode, event);
+	}
+
+	private boolean handleStopKey(KeyEvent event) {
+		// only handle this event if it was raised after the dialog was shown
+		if (event.getAction() != KeyEvent.ACTION_DOWN
+				|| event.getRepeatCount() != 0
+				|| event.getDownTime() <= dialogStartTime) {
+			return false;
+		}
+
+		if (event.getKeyCode() == KeyEvent.KEYCODE_DPAD_CENTER
+				|| VoiceButtonPreferences.contains(
+				PreferenceManager.getDefaultSharedPreferences(context), event.getKeyCode())) {
+			stopRecording();
+			return true;
+		}
+
+		return false;
 	}
 
 	public boolean isRecording() {

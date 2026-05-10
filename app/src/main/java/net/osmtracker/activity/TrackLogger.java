@@ -19,6 +19,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Build;
 import android.os.StrictMode;
+import android.os.SystemClock;
 import android.provider.MediaStore;
 import android.provider.Settings;
 import android.util.Log;
@@ -50,6 +51,7 @@ import net.osmtracker.util.CustomLayoutsUtils;
 import net.osmtracker.util.FileSystemUtils;
 import net.osmtracker.util.ThemeValidator;
 import net.osmtracker.util.VoiceAudioRouter;
+import net.osmtracker.util.VoiceButtonMediaSession;
 import net.osmtracker.util.VoiceButtonPreferences;
 import net.osmtracker.view.TextNoteDialog;
 import net.osmtracker.view.VoiceRecDialog;
@@ -169,7 +171,11 @@ public class TrackLogger extends Activity {
 
 	private VoiceAudioRouter voiceAudioRouter;
 
+	private VoiceButtonMediaSession voiceButtonMediaSession;
+
 	private VoiceRecDialog voiceRecDialog;
+
+	private long lastVoiceButtonTime = 0;
 
 
 	/*
@@ -355,6 +361,11 @@ public class TrackLogger extends Activity {
 			Toast.makeText(this, R.string.tracklogger_waiting_gps, Toast.LENGTH_LONG).show();
 		}
 
+		if (!VoiceButtonPreferences.getKeyCodes(prefs).isEmpty()) {
+			voiceButtonMediaSession = new VoiceButtonMediaSession(
+					this, "OSMTracker voice button", this::handleVoiceButton);
+			voiceButtonMediaSession.start();
+		}
 		voiceAudioRouter.startTracking(prefs);
 
 		//save the layout file name if it change, in tags array
@@ -411,6 +422,10 @@ public class TrackLogger extends Activity {
 			pressureListener.unregister();
 		}
 
+		if (voiceButtonMediaSession != null) {
+			voiceButtonMediaSession.stop();
+			voiceButtonMediaSession = null;
+		}
 		voiceAudioRouter.stopTracking();
 
 		super.onPause();
@@ -750,6 +765,12 @@ public class TrackLogger extends Activity {
 				|| !VoiceButtonPreferences.contains(prefs, event.getKeyCode())) {
 			return false;
 		}
+
+		long now = SystemClock.uptimeMillis();
+		if (now - lastVoiceButtonTime < 400) {
+			return true;
+		}
+		lastVoiceButtonTime = now;
 
 		toggleVoiceRecording();
 		return true;

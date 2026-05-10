@@ -65,6 +65,8 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 	private boolean recorderStarted = false;
 
 	private boolean isStopping = false;
+
+	private boolean voiceRouteStopped = false;
 	
 	/**
 	 * MediaPlayer used to play a short beepbeep when recording starts
@@ -168,6 +170,7 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 			Log.d(TAG,"onStart() currently not recording, start a new one");
 			
 			isRecording = true;
+			voiceRouteStopped = false;
 			// Get a new audio filename
 			File audioFile = getAudioFile();
 
@@ -238,11 +241,7 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 		recorderStarted = false;
 		isStopping = false;
 		playSound = false;
-
-		if (!VoiceButtonPreferences.getKeyCodes(
-				PreferenceManager.getDefaultSharedPreferences(context)).isEmpty()) {
-			voiceAudioRouter.stopTracking();
-		}
+		stopVoiceRouteForButtons();
 		
 		try {
 			this.getOwnerActivity().setRequestedOrientation(currentRequestedOrientation);
@@ -305,7 +304,10 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 		recorderStarted = false;
 
 		if (mediaPlayerStop != null) {
-			mediaPlayerStop.setOnCompletionListener(mp -> VoiceRecDialog.this.dismiss());
+			mediaPlayerStop.setOnCompletionListener(mp -> {
+				stopVoiceRouteForButtons();
+				VoiceRecDialog.this.dismiss();
+			});
 			try {
 				mediaPlayerStop.start();
 				return;
@@ -314,6 +316,7 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 			}
 		}
 
+		stopVoiceRouteForButtons();
 		VoiceRecDialog.this.dismiss();
 	}
 
@@ -391,7 +394,20 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 	private void failRecording() {
 		Toast.makeText(context, context.getResources().getString(R.string.error_voicerec_failed),
 				Toast.LENGTH_SHORT).show();
+		stopVoiceRouteForButtons();
 		VoiceRecDialog.this.dismiss();
+	}
+
+	private void stopVoiceRouteForButtons() {
+		if (voiceRouteStopped) {
+			return;
+		}
+
+		if (!VoiceButtonPreferences.getKeyCodes(
+				PreferenceManager.getDefaultSharedPreferences(context)).isEmpty()) {
+			voiceRouteStopped = true;
+			voiceAudioRouter.stopTracking();
+		}
 	}
 
 	private void prepareMediaPlayers(boolean bluetoothActive) {

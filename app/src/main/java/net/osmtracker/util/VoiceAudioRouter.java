@@ -29,6 +29,7 @@ public class VoiceAudioRouter {
 
 	private static final String TAG = VoiceAudioRouter.class.getSimpleName();
 	private static final long BLUETOOTH_SCO_TIMEOUT_MS = 5000;
+	private static final long BLUETOOTH_COMMUNICATION_DEVICE_SETTLE_MS = 500;
 
 	private final Context context;
 	private final AudioManager audioManager;
@@ -38,6 +39,7 @@ public class VoiceAudioRouter {
 	private AudioDeviceCallback audioDeviceCallback;
 	private Callback pendingCallback;
 	private Runnable pendingTimeout;
+	private Runnable pendingReady;
 	private String trackingSource = OSMTracker.Preferences.VAL_VOICEREC_AUDIO_SOURCE;
 	private boolean bluetoothActive;
 	private boolean tracking;
@@ -51,6 +53,7 @@ public class VoiceAudioRouter {
 	public void startTracking(SharedPreferences preferences) {
 		tracking = true;
 		trackingSource = getAudioSource(preferences);
+		// Keep headset media buttons available when they are used to start voice recordings.
 		warmUpEnabled = VoiceButtonPreferences.getKeyCodes(preferences).isEmpty();
 
 		if (!isBluetoothSource(trackingSource)) {
@@ -166,6 +169,14 @@ public class VoiceAudioRouter {
 
 	private void prepareCommunicationDevice(String source, Callback callback) {
 		try {
+			AudioDeviceInfo currentDevice = audioManager.getCommunicationDevice();
+			if (currentDevice != null && isBluetoothDevice(currentDevice)) {
+				audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+				bluetoothActive = true;
+				callback.onReady(true);
+				return;
+			}
+
 			AudioDeviceInfo device = findBluetoothCommunicationDevice();
 			if (device == null) {
 				handleBluetoothFailure(source, callback);
@@ -175,8 +186,17 @@ public class VoiceAudioRouter {
 			audioManager.clearCommunicationDevice();
 			audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
 			if (audioManager.setCommunicationDevice(device)) {
-				bluetoothActive = true;
-				callback.onReady(true);
+				pendingCallback = callback;
+				pendingReady = () -> {
+					Callback readyCallback = pendingCallback;
+					pendingCallback = null;
+					pendingReady = null;
+					bluetoothActive = true;
+					if (readyCallback != null) {
+						readyCallback.onReady(true);
+					}
+				};
+				handler.postDelayed(pendingReady, BLUETOOTH_COMMUNICATION_DEVICE_SETTLE_MS);
 			} else {
 				handleBluetoothFailure(source, callback);
 			}
@@ -292,6 +312,10 @@ public class VoiceAudioRouter {
 		if (pendingTimeout != null) {
 			handler.removeCallbacks(pendingTimeout);
 			pendingTimeout = null;
+		}
+		if (pendingReady != null) {
+			handler.removeCallbacks(pendingReady);
+			pendingReady = null;
 		}
 		pendingCallback = null;
 

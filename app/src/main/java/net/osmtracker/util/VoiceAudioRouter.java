@@ -29,7 +29,7 @@ public class VoiceAudioRouter {
 
 	private static final String TAG = VoiceAudioRouter.class.getSimpleName();
 	private static final long BLUETOOTH_SCO_TIMEOUT_MS = 5000;
-	private static final long BLUETOOTH_COMMUNICATION_DEVICE_SETTLE_MS = 500;
+	private static final long BLUETOOTH_COMMUNICATION_DEVICE_SETTLE_MS = 1000;
 
 	private final Context context;
 	private final AudioManager audioManager;

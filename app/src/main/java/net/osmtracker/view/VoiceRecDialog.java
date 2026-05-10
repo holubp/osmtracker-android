@@ -429,6 +429,9 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 					: AudioManager.STREAM_MUSIC);
 			mediaPlayer.setDataSource(afd.getFileDescriptor(), afd.getStartOffset(), afd.getLength());
 			mediaPlayer.setLooping(false);
+			if (resId == R.raw.beepbeep) {
+				mediaPlayer.setVolume(0.6f, 0.6f);
+			}
 			mediaPlayer.prepare();
 			return mediaPlayer;
 		} catch (Exception e) {

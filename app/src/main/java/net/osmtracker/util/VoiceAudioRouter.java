@@ -29,7 +29,7 @@ public class VoiceAudioRouter {
 
 	private static final String TAG = VoiceAudioRouter.class.getSimpleName();
 	private static final long BLUETOOTH_SCO_TIMEOUT_MS = 5000;
-	private static final long BLUETOOTH_COMMUNICATION_DEVICE_SETTLE_MS = 1000;
+	private static final int MAX_START_BEEP_DELAY_MS = 10000;
 
 	private final Context context;
 	private final AudioManager audioManager;
@@ -41,6 +41,8 @@ public class VoiceAudioRouter {
 	private Runnable pendingTimeout;
 	private Runnable pendingReady;
 	private String trackingSource = OSMTracker.Preferences.VAL_VOICEREC_AUDIO_SOURCE;
+	private int startBeepDelayMs = Integer.parseInt(
+			OSMTracker.Preferences.VAL_VOICEREC_START_BEEP_DELAY);
 	private boolean bluetoothActive;
 	private boolean tracking;
 	private boolean warmUpEnabled;
@@ -53,6 +55,7 @@ public class VoiceAudioRouter {
 	public void startTracking(SharedPreferences preferences) {
 		tracking = true;
 		trackingSource = getAudioSource(preferences);
+		startBeepDelayMs = getStartBeepDelay(preferences);
 		// Keep headset media buttons available when they are used to start voice recordings.
 		warmUpEnabled = VoiceButtonPreferences.getKeyCodes(preferences).isEmpty();
 
@@ -157,6 +160,17 @@ public class VoiceAudioRouter {
 				&& isBluetoothSource(getAudioSource(preferences));
 	}
 
+	public static int getStartBeepDelay(SharedPreferences preferences) {
+		try {
+			int delay = Integer.parseInt(preferences.getString(
+					OSMTracker.Preferences.KEY_VOICEREC_START_BEEP_DELAY,
+					OSMTracker.Preferences.VAL_VOICEREC_START_BEEP_DELAY));
+			return Math.max(0, Math.min(MAX_START_BEEP_DELAY_MS, delay));
+		} catch (NumberFormatException e) {
+			return Integer.parseInt(OSMTracker.Preferences.VAL_VOICEREC_START_BEEP_DELAY);
+		}
+	}
+
 	public static boolean hasBluetoothPermission(Context context) {
 		return Build.VERSION.SDK_INT < Build.VERSION_CODES.S
 				|| context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)
@@ -172,8 +186,7 @@ public class VoiceAudioRouter {
 			AudioDeviceInfo currentDevice = audioManager.getCommunicationDevice();
 			if (currentDevice != null && isBluetoothDevice(currentDevice)) {
 				audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
-				bluetoothActive = true;
-				callback.onReady(true);
+				notifyBluetoothReady(callback);
 				return;
 			}
 
@@ -186,17 +199,7 @@ public class VoiceAudioRouter {
 			audioManager.clearCommunicationDevice();
 			audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
 			if (audioManager.setCommunicationDevice(device)) {
-				pendingCallback = callback;
-				pendingReady = () -> {
-					Callback readyCallback = pendingCallback;
-					pendingCallback = null;
-					pendingReady = null;
-					bluetoothActive = true;
-					if (readyCallback != null) {
-						readyCallback.onReady(true);
-					}
-				};
-				handler.postDelayed(pendingReady, BLUETOOTH_COMMUNICATION_DEVICE_SETTLE_MS);
+				notifyBluetoothReady(callback);
 			} else {
 				handleBluetoothFailure(source, callback);
 			}
@@ -253,9 +256,8 @@ public class VoiceAudioRouter {
 				if (state == AudioManager.SCO_AUDIO_STATE_CONNECTED) {
 					Callback callback = pendingCallback;
 					cancelPending();
-					bluetoothActive = true;
 					if (callback != null) {
-						callback.onReady(true);
+						notifyBluetoothReady(callback);
 					}
 				} else if (state == AudioManager.SCO_AUDIO_STATE_DISCONNECTED
 						|| state == AudioManager.SCO_AUDIO_STATE_ERROR) {
@@ -306,6 +308,26 @@ public class VoiceAudioRouter {
 		}
 		audioManager.unregisterAudioDeviceCallback(audioDeviceCallback);
 		audioDeviceCallback = null;
+	}
+
+	private void notifyBluetoothReady(Callback callback) {
+		if (warmUpEnabled || startBeepDelayMs <= 0) {
+			bluetoothActive = true;
+			callback.onReady(true);
+			return;
+		}
+
+		pendingCallback = callback;
+		pendingReady = () -> {
+			Callback readyCallback = pendingCallback;
+			pendingCallback = null;
+			pendingReady = null;
+			bluetoothActive = true;
+			if (readyCallback != null) {
+				readyCallback.onReady(true);
+			}
+		};
+		handler.postDelayed(pendingReady, startBeepDelayMs);
 	}
 
 	private void cancelPending() {

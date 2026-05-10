@@ -58,6 +58,10 @@
     <item>Prefer Bluetooth headset</item>
     <item>Require Bluetooth headset</item>
   </string-array>
+  <string name="prefs_voicerec_start_beep_delay">Bluetooth start beep delay</string>
+  <string name="prefs_voicerec_start_beep_delay_summary">Wait before playing the start beep after opening Bluetooth headset audio</string>
+  <string name="prefs_voicerec_start_beep_delay_ms">ms</string>
+  <string name="prefs_voicerec_start_beep_delay_empty">Bluetooth start beep delay cannot be empty</string>
   <string name="prefs_voicerec_buttons">Headset voice button (experimental)</string>
   <string name="prefs_voicerec_buttons_summary">Disabled</string>
   <string name="prefs_voicerec_buttons_dialog_title">Headset voice button</string>

@@ -1,5 +1,6 @@
 package net.osmtracker.util;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -64,5 +65,23 @@ public class VoiceButtonPreferencesTest {
 		assertTrue(VoiceButtonPreferences.contains(
 				preferences, KeyEvent.KEYCODE_HEADSETHOOK));
 		assertFalse(VoiceButtonPreferences.contains(preferences, KeyEvent.KEYCODE_CAMERA));
+	}
+
+	@Test
+	public void startBeepDelayFallsBackWhenInvalid() {
+		preferences.edit()
+				.putString(OSMTracker.Preferences.KEY_VOICEREC_START_BEEP_DELAY, "bad")
+				.commit();
+
+		assertEquals(1000, VoiceAudioRouter.getStartBeepDelay(preferences));
+	}
+
+	@Test
+	public void startBeepDelayIsClamped() {
+		preferences.edit()
+				.putString(OSMTracker.Preferences.KEY_VOICEREC_START_BEEP_DELAY, "20000")
+				.commit();
+
+		assertEquals(10000, VoiceAudioRouter.getStartBeepDelay(preferences));
 	}
 }

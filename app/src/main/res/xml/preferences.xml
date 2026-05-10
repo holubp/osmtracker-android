@@ -17,6 +17,12 @@
         app:key="voicerec.audio_source"
         app:summary="@string/prefs_voicerec_audio_source_summary"
         app:title="@string/prefs_voicerec_audio_source" />
+    <EditTextPreference
+        android:inputType="number"
+        app:defaultValue="1000"
+        app:key="voicerec.start_beep_delay"
+        app:summary="@string/prefs_voicerec_start_beep_delay_summary"
+        app:title="@string/prefs_voicerec_start_beep_delay" />
     <Preference
         app:key="voicerec.buttons"
         app:summary="@string/prefs_voicerec_buttons_summary"

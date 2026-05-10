@@ -45,6 +45,7 @@ import net.osmtracker.layout.GpsStatusRecord;
 import net.osmtracker.layout.UserDefinedLayout;
 import net.osmtracker.listener.PressureListener;
 import net.osmtracker.listener.SensorListener;
+import net.osmtracker.receiver.MediaButtonReceiver;
 import net.osmtracker.service.gps.GPSLogger;
 import net.osmtracker.service.gps.GPSLoggerServiceConnection;
 import net.osmtracker.util.CustomLayoutsUtils;
@@ -362,6 +363,7 @@ public class TrackLogger extends Activity {
 		}
 
 		if (!VoiceButtonPreferences.getKeyCodes(prefs).isEmpty()) {
+			MediaButtonReceiver.setActiveListener(this::handleVoiceButton);
 			voiceButtonMediaSession = new VoiceButtonMediaSession(
 					this, "OSMTracker voice button", this::handleVoiceButton);
 			voiceButtonMediaSession.start();
@@ -422,6 +424,7 @@ public class TrackLogger extends Activity {
 			pressureListener.unregister();
 		}
 
+		MediaButtonReceiver.setActiveListener(null);
 		if (voiceButtonMediaSession != null) {
 			voiceButtonMediaSession.stop();
 			voiceButtonMediaSession = null;

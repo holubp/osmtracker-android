@@ -1,5 +1,7 @@
 package net.osmtracker.util;
 
+import android.app.PendingIntent;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.media.session.MediaSession;
@@ -15,6 +17,12 @@ public class VoiceButtonMediaSession {
 	public VoiceButtonMediaSession(Context context, String tag,
 								   MediaButtonReceiver.MediaButtonListener listener) {
 		mediaSession = new MediaSession(context.getApplicationContext(), tag);
+		mediaSession.setMediaButtonReceiver(PendingIntent.getBroadcast(
+				context.getApplicationContext(),
+				0,
+				new Intent(Intent.ACTION_MEDIA_BUTTON)
+						.setComponent(new ComponentName(context, MediaButtonReceiver.class)),
+				PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE));
 		mediaSession.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS
 				| MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
 		mediaSession.setCallback(new MediaSession.Callback() {

@@ -41,6 +41,7 @@ public class VoiceAudioRouter {
 	private String trackingSource = OSMTracker.Preferences.VAL_VOICEREC_AUDIO_SOURCE;
 	private boolean bluetoothActive;
 	private boolean tracking;
+	private boolean warmUpEnabled;
 
 	public VoiceAudioRouter(Context context) {
 		this.context = context.getApplicationContext();
@@ -50,6 +51,7 @@ public class VoiceAudioRouter {
 	public void startTracking(SharedPreferences preferences) {
 		tracking = true;
 		trackingSource = getAudioSource(preferences);
+		warmUpEnabled = VoiceButtonPreferences.getKeyCodes(preferences).isEmpty();
 
 		if (!isBluetoothSource(trackingSource)) {
 			release();
@@ -57,17 +59,20 @@ public class VoiceAudioRouter {
 		}
 
 		registerAudioDeviceCallback();
-		warmUp();
+		if (warmUpEnabled) {
+			warmUp();
+		}
 	}
 
 	public void stopTracking() {
 		tracking = false;
+		warmUpEnabled = false;
 		unregisterAudioDeviceCallback();
 		release();
 	}
 
 	public void warmUp() {
-		if (!tracking || !isBluetoothSource(trackingSource)) {
+		if (!tracking || !warmUpEnabled || !isBluetoothSource(trackingSource)) {
 			return;
 		}
 

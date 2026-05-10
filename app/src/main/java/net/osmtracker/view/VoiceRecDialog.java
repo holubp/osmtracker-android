@@ -238,6 +238,11 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 		recorderStarted = false;
 		isStopping = false;
 		playSound = false;
+
+		if (!VoiceButtonPreferences.getKeyCodes(
+				PreferenceManager.getDefaultSharedPreferences(context)).isEmpty()) {
+			voiceAudioRouter.stopTracking();
+		}
 		
 		try {
 			this.getOwnerActivity().setRequestedOrientation(currentRequestedOrientation);

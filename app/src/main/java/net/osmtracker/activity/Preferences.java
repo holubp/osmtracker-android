@@ -66,6 +66,10 @@ public class Preferences extends AppCompatActivity {
 					OSMTracker.Preferences.KEY_VOICEREC_AUDIO_SOURCE,
 					getString(R.string.prefs_voicerec_audio_source_summary)
 			);
+			setupListPreference(
+					OSMTracker.Preferences.KEY_VOICEREC_AUDIO_FOCUS,
+					getString(R.string.prefs_voicerec_audio_focus_summary)
+			);
 			setupEditTextNum(
 					OSMTracker.Preferences.KEY_VOICEREC_START_BEEP_DELAY,
 					getString(R.string.prefs_voicerec_start_beep_delay_ms),

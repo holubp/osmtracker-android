@@ -7,8 +7,10 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.media.AudioAttributes;
 import android.media.AudioDeviceCallback;
 import android.media.AudioDeviceInfo;
+import android.media.AudioFocusRequest;
 import android.media.AudioManager;
 import android.os.Build;
 import android.os.Handler;
@@ -41,11 +43,20 @@ public class VoiceAudioRouter {
 	private Runnable pendingTimeout;
 	private Runnable pendingReady;
 	private String trackingSource = OSMTracker.Preferences.VAL_VOICEREC_AUDIO_SOURCE;
+	private String audioFocusMode = OSMTracker.Preferences.VAL_VOICEREC_AUDIO_FOCUS;
 	private int startBeepDelayMs = Integer.parseInt(
 			OSMTracker.Preferences.VAL_VOICEREC_START_BEEP_DELAY);
+	private Object audioFocusRequest;
+	private boolean audioFocusHeld;
 	private boolean bluetoothActive;
 	private boolean tracking;
 	private boolean warmUpEnabled;
+	private final AudioManager.OnAudioFocusChangeListener audioFocusChangeListener =
+			focusChange -> {
+				if (focusChange == AudioManager.AUDIOFOCUS_LOSS) {
+					audioFocusHeld = false;
+				}
+			};
 
 	public VoiceAudioRouter(Context context) {
 		this.context = context.getApplicationContext();
@@ -55,9 +66,11 @@ public class VoiceAudioRouter {
 	public void startTracking(SharedPreferences preferences) {
 		tracking = true;
 		trackingSource = getAudioSource(preferences);
+		audioFocusMode = getAudioFocusMode(preferences);
 		startBeepDelayMs = getStartBeepDelay(preferences);
 		// Keep headset media buttons available when they are used to start voice recordings.
-		warmUpEnabled = VoiceButtonPreferences.getKeyCodes(preferences).isEmpty();
+		warmUpEnabled = VoiceButtonPreferences.getKeyCodes(preferences).isEmpty()
+				|| isAudioFocusForTracking(preferences);
 
 		if (!isBluetoothSource(trackingSource)) {
 			release();
@@ -65,6 +78,9 @@ public class VoiceAudioRouter {
 		}
 
 		registerAudioDeviceCallback();
+		if (isAudioFocusForTracking(preferences) && !requestVoiceAudioFocus()) {
+			Log.w(TAG, "Could not obtain Bluetooth voice audio focus");
+		}
 		if (warmUpEnabled) {
 			warmUp();
 		}
@@ -109,6 +125,12 @@ public class VoiceAudioRouter {
 			return;
 		}
 
+		if (usesAudioFocus() && !requestVoiceAudioFocus()) {
+			Log.w(TAG, "Could not obtain Bluetooth voice audio focus");
+			handleBluetoothFailure(source, callback);
+			return;
+		}
+
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
 			prepareCommunicationDevice(source, callback);
 		} else {
@@ -120,6 +142,19 @@ public class VoiceAudioRouter {
 		cancelPending();
 		bluetoothActive = false;
 		clearAudioRoute();
+		abandonVoiceAudioFocus();
+	}
+
+	public void finishRecording(SharedPreferences preferences) {
+		if (isAudioFocusForTracking(preferences)) {
+			return;
+		}
+
+		if (!VoiceButtonPreferences.getKeyCodes(preferences).isEmpty()) {
+			stopTracking();
+		} else {
+			abandonVoiceAudioFocus();
+		}
 	}
 
 	private void clearAudioRoute() {
@@ -158,6 +193,22 @@ public class VoiceAudioRouter {
 	public static boolean requiresBluetoothPermission(SharedPreferences preferences) {
 		return Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 				&& isBluetoothSource(getAudioSource(preferences));
+	}
+
+	public static String getAudioFocusMode(SharedPreferences preferences) {
+		String mode = preferences.getString(
+				OSMTracker.Preferences.KEY_VOICEREC_AUDIO_FOCUS,
+				OSMTracker.Preferences.VAL_VOICEREC_AUDIO_FOCUS);
+		if (OSMTracker.Preferences.VAL_VOICEREC_AUDIO_FOCUS_RECORDING.equals(mode)
+				|| OSMTracker.Preferences.VAL_VOICEREC_AUDIO_FOCUS_TRACKING.equals(mode)) {
+			return mode;
+		}
+		return OSMTracker.Preferences.VAL_VOICEREC_AUDIO_FOCUS_NONE;
+	}
+
+	public static boolean isAudioFocusForTracking(SharedPreferences preferences) {
+		return OSMTracker.Preferences.VAL_VOICEREC_AUDIO_FOCUS_TRACKING.equals(
+				getAudioFocusMode(preferences));
 	}
 
 	public static int getStartBeepDelay(SharedPreferences preferences) {
@@ -310,6 +361,54 @@ public class VoiceAudioRouter {
 		audioDeviceCallback = null;
 	}
 
+	private boolean usesAudioFocus() {
+		return !OSMTracker.Preferences.VAL_VOICEREC_AUDIO_FOCUS_NONE.equals(audioFocusMode);
+	}
+
+	private boolean requestVoiceAudioFocus() {
+		if (audioFocusHeld) {
+			return true;
+		}
+
+		int focusGain = OSMTracker.Preferences.VAL_VOICEREC_AUDIO_FOCUS_TRACKING.equals(audioFocusMode)
+				? AudioManager.AUDIOFOCUS_GAIN
+				: AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE;
+		int result;
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+			AudioAttributes attributes = new AudioAttributes.Builder()
+					.setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+					.setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+					.build();
+			AudioFocusRequest request = new AudioFocusRequest.Builder(focusGain)
+					.setAudioAttributes(attributes)
+					.setAcceptsDelayedFocusGain(false)
+					.setOnAudioFocusChangeListener(audioFocusChangeListener, handler)
+					.build();
+			audioFocusRequest = request;
+			result = audioManager.requestAudioFocus(request);
+		} else {
+			result = audioManager.requestAudioFocus(audioFocusChangeListener,
+					AudioManager.STREAM_VOICE_CALL, focusGain);
+		}
+
+		audioFocusHeld = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
+		return audioFocusHeld;
+	}
+
+	private void abandonVoiceAudioFocus() {
+		if (!audioFocusHeld && audioFocusRequest == null) {
+			return;
+		}
+
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && audioFocusRequest != null) {
+			audioManager.abandonAudioFocusRequest((AudioFocusRequest) audioFocusRequest);
+			audioFocusRequest = null;
+		} else {
+			audioManager.abandonAudioFocus(audioFocusChangeListener);
+		}
+		audioFocusHeld = false;
+	}
+
 	private void notifyBluetoothReady(Callback callback) {
 		if (warmUpEnabled || startBeepDelayMs <= 0) {
 			bluetoothActive = true;
@@ -354,6 +453,7 @@ public class VoiceAudioRouter {
 	private void handleBluetoothFailure(String source, Callback callback) {
 		bluetoothActive = false;
 		clearAudioRoute();
+		abandonVoiceAudioFocus();
 		if (isBluetoothRequired(source)) {
 			callback.onFailed();
 		} else {

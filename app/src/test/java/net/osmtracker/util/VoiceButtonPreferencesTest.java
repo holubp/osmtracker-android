@@ -84,4 +84,14 @@ public class VoiceButtonPreferencesTest {
 
 		assertEquals(10000, VoiceAudioRouter.getStartBeepDelay(preferences));
 	}
+
+	@Test
+	public void audioFocusModeFallsBackWhenInvalid() {
+		preferences.edit()
+				.putString(OSMTracker.Preferences.KEY_VOICEREC_AUDIO_FOCUS, "bad")
+				.commit();
+
+		assertEquals(OSMTracker.Preferences.VAL_VOICEREC_AUDIO_FOCUS_NONE,
+				VoiceAudioRouter.getAudioFocusMode(preferences));
+	}
 }

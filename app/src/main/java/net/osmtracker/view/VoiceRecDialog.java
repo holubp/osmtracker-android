@@ -241,7 +241,7 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 		recorderStarted = false;
 		isStopping = false;
 		playSound = false;
-		stopVoiceRouteForButtons();
+		finishVoiceAudio();
 		
 		try {
 			this.getOwnerActivity().setRequestedOrientation(currentRequestedOrientation);
@@ -305,7 +305,7 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 
 		if (mediaPlayerStop != null) {
 			mediaPlayerStop.setOnCompletionListener(mp -> {
-				stopVoiceRouteForButtons();
+				finishVoiceAudio();
 				VoiceRecDialog.this.dismiss();
 			});
 			try {
@@ -316,7 +316,7 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 			}
 		}
 
-		stopVoiceRouteForButtons();
+		finishVoiceAudio();
 		VoiceRecDialog.this.dismiss();
 	}
 
@@ -394,20 +394,17 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 	private void failRecording() {
 		Toast.makeText(context, context.getResources().getString(R.string.error_voicerec_failed),
 				Toast.LENGTH_SHORT).show();
-		stopVoiceRouteForButtons();
+		finishVoiceAudio();
 		VoiceRecDialog.this.dismiss();
 	}
 
-	private void stopVoiceRouteForButtons() {
+	private void finishVoiceAudio() {
 		if (voiceRouteStopped) {
 			return;
 		}
 
-		if (!VoiceButtonPreferences.getKeyCodes(
-				PreferenceManager.getDefaultSharedPreferences(context)).isEmpty()) {
-			voiceRouteStopped = true;
-			voiceAudioRouter.stopTracking();
-		}
+		voiceRouteStopped = true;
+		voiceAudioRouter.finishRecording(PreferenceManager.getDefaultSharedPreferences(context));
 	}
 
 	private void prepareMediaPlayers(boolean bluetoothActive) {

@@ -49,6 +49,7 @@
     <item>Portrait</item>
     <item>Landscape</item>
   </string-array>
+  <string name="prefs_bluetooth_voice">Bluetooth voice recording</string>
   <string name="prefs_voicerec_duration">Voice record duration</string>
   <string name="prefs_voicerec_duration_seconds">seconds</string>
   <string name="prefs_voicerec_audio_source">Voice recording microphone</string>
@@ -57,6 +58,18 @@
     <item>Phone microphone</item>
     <item>Prefer Bluetooth headset</item>
     <item>Require Bluetooth headset</item>
+  </string-array>
+  <string name="prefs_voicerec_audio_focus">Bluetooth audio priority</string>
+  <string name="prefs_voicerec_audio_focus_summary">Control how strongly OSMTracker takes over Bluetooth audio from navigation or media apps</string>
+  <string-array name="prefs_voicerec_audio_focus_keys">
+    <item>Do not request priority</item>
+    <item>During voice recordings</item>
+    <item>For the whole track</item>
+  </string-array>
+  <string-array name="prefs_voicerec_audio_focus_values">
+    <item>none</item>
+    <item>recording</item>
+    <item>tracking</item>
   </string-array>
   <string name="prefs_voicerec_start_beep_delay">Bluetooth start beep delay</string>
   <string name="prefs_voicerec_start_beep_delay_summary">Wait before playing the start beep after opening Bluetooth headset audio</string>

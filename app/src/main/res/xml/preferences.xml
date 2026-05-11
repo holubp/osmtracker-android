@@ -10,28 +10,39 @@
         app:entryValues="@array/prefs_voicerec_durations"
         app:key="voicerec.duration"
         app:title="@string/prefs_voicerec_duration" />
-    <ListPreference
-        app:defaultValue="phone"
-        app:entries="@array/prefs_voicerec_audio_source_keys"
-        app:entryValues="@array/prefs_voicerec_audio_source_values"
-        app:key="voicerec.audio_source"
-        app:summary="@string/prefs_voicerec_audio_source_summary"
-        app:title="@string/prefs_voicerec_audio_source" />
-    <EditTextPreference
-        android:inputType="number"
-        app:defaultValue="1000"
-        app:key="voicerec.start_beep_delay"
-        app:summary="@string/prefs_voicerec_start_beep_delay_summary"
-        app:title="@string/prefs_voicerec_start_beep_delay" />
-    <Preference
-        app:key="voicerec.buttons"
-        app:summary="@string/prefs_voicerec_buttons_summary"
-        app:title="@string/prefs_voicerec_buttons" />
     <CheckBoxPreference
         app:defaultValue="true"
         app:key="sound_enabled"
         app:summary="@string/prefs_sound_enabled_summary"
         app:title="@string/prefs_sound_enabled" />
+
+    <PreferenceCategory app:title="@string/prefs_bluetooth_voice">
+        <ListPreference
+            app:defaultValue="phone"
+            app:entries="@array/prefs_voicerec_audio_source_keys"
+            app:entryValues="@array/prefs_voicerec_audio_source_values"
+            app:key="voicerec.audio_source"
+            app:summary="@string/prefs_voicerec_audio_source_summary"
+            app:title="@string/prefs_voicerec_audio_source" />
+        <ListPreference
+            app:defaultValue="none"
+            app:entries="@array/prefs_voicerec_audio_focus_keys"
+            app:entryValues="@array/prefs_voicerec_audio_focus_values"
+            app:key="voicerec.audio_focus"
+            app:summary="@string/prefs_voicerec_audio_focus_summary"
+            app:title="@string/prefs_voicerec_audio_focus" />
+        <EditTextPreference
+            android:inputType="number"
+            app:defaultValue="1000"
+            app:key="voicerec.start_beep_delay"
+            app:summary="@string/prefs_voicerec_start_beep_delay_summary"
+            app:title="@string/prefs_voicerec_start_beep_delay" />
+        <Preference
+            app:key="voicerec.buttons"
+            app:summary="@string/prefs_voicerec_buttons_summary"
+            app:title="@string/prefs_voicerec_buttons" />
+    </PreferenceCategory>
+
     <CheckBoxPreference
         app:defaultValue="false"
         app:key="gpx.use_barometer"

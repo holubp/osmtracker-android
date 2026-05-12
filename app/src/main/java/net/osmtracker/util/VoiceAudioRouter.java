@@ -68,9 +68,7 @@ public class VoiceAudioRouter {
 		trackingSource = getAudioSource(preferences);
 		audioFocusMode = getAudioFocusMode(preferences);
 		startBeepDelayMs = getStartBeepDelay(preferences);
-		// Keep headset media buttons available when they are used to start voice recordings.
-		warmUpEnabled = VoiceButtonPreferences.getKeyCodes(preferences).isEmpty()
-				|| isAudioFocusForTracking(preferences);
+		warmUpEnabled = isAudioFocusForTracking(preferences);
 
 		if (!isBluetoothSource(trackingSource)) {
 			release();
@@ -150,11 +148,7 @@ public class VoiceAudioRouter {
 			return;
 		}
 
-		if (!VoiceButtonPreferences.getKeyCodes(preferences).isEmpty()) {
-			stopTracking();
-		} else {
-			abandonVoiceAudioFocus();
-		}
+		release();
 	}
 
 	private void clearAudioRoute() {

@@ -60,7 +60,7 @@
     <item>Require Bluetooth headset</item>
   </string-array>
   <string name="prefs_voicerec_audio_focus">Bluetooth audio priority</string>
-  <string name="prefs_voicerec_audio_focus_summary">Control how strongly OSMTracker takes over Bluetooth audio from navigation or media apps</string>
+  <string name="prefs_voicerec_audio_focus_summary">Control how strongly OSMTracker takes over Bluetooth audio. Whole-track priority may block navigation audio.</string>
   <string-array name="prefs_voicerec_audio_focus_keys">
     <item>Do not request priority</item>
     <item>During voice recordings</item>

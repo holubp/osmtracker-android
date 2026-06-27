@@ -15,6 +15,7 @@ import android.media.AudioManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 
 import net.osmtracker.OSMTracker;
@@ -30,8 +31,10 @@ public class VoiceAudioRouter {
 	}
 
 	private static final String TAG = VoiceAudioRouter.class.getSimpleName();
-	private static final long BLUETOOTH_SCO_TIMEOUT_MS = 5000;
-	private static final int MAX_START_BEEP_DELAY_MS = 10000;
+	private static final long BLUETOOTH_ROUTE_CHECK_MS = 50;
+	private static final long BLUETOOTH_ROUTE_COOLDOWN_MS = 2000;
+	private static final int MAX_BLUETOOTH_ROUTE_TIMEOUT_MS = 10000;
+	private static final int MAX_FINAL_BEEP_DELAY_MS = 5000;
 
 	private final Context context;
 	private final AudioManager audioManager;
@@ -42,9 +45,10 @@ public class VoiceAudioRouter {
 	private Callback pendingCallback;
 	private Runnable pendingTimeout;
 	private Runnable pendingReady;
+	private Runnable pendingRelease;
 	private String trackingSource = OSMTracker.Preferences.VAL_VOICEREC_AUDIO_SOURCE;
 	private String audioFocusMode = OSMTracker.Preferences.VAL_VOICEREC_AUDIO_FOCUS;
-	private int startBeepDelayMs = Integer.parseInt(
+	private int bluetoothRouteTimeoutMs = Integer.parseInt(
 			OSMTracker.Preferences.VAL_VOICEREC_START_BEEP_DELAY);
 	private Object audioFocusRequest;
 	private boolean audioFocusHeld;
@@ -67,7 +71,7 @@ public class VoiceAudioRouter {
 		tracking = true;
 		trackingSource = getAudioSource(preferences);
 		audioFocusMode = getAudioFocusMode(preferences);
-		startBeepDelayMs = getStartBeepDelay(preferences);
+		bluetoothRouteTimeoutMs = getBluetoothRouteTimeout(preferences);
 		warmUpEnabled = isAudioFocusForTracking(preferences);
 
 		if (!isBluetoothSource(trackingSource)) {
@@ -138,9 +142,7 @@ public class VoiceAudioRouter {
 
 	public void release() {
 		cancelPending();
-		bluetoothActive = false;
-		clearAudioRoute();
-		abandonVoiceAudioFocus();
+		releaseRoute();
 	}
 
 	public void finishRecording(SharedPreferences preferences) {
@@ -148,7 +150,22 @@ public class VoiceAudioRouter {
 			return;
 		}
 
-		release();
+		if (!bluetoothActive) {
+			release();
+			return;
+		}
+
+		pendingRelease = () -> {
+			pendingRelease = null;
+			releaseRoute();
+		};
+		handler.postDelayed(pendingRelease, BLUETOOTH_ROUTE_COOLDOWN_MS);
+	}
+
+	private void releaseRoute() {
+		bluetoothActive = false;
+		clearAudioRoute();
+		abandonVoiceAudioFocus();
 	}
 
 	private void clearAudioRoute() {
@@ -205,14 +222,53 @@ public class VoiceAudioRouter {
 				getAudioFocusMode(preferences));
 	}
 
+	public static int getBluetoothRouteTimeout(SharedPreferences preferences) {
+		return getIntPreference(
+				preferences,
+				OSMTracker.Preferences.KEY_VOICEREC_START_BEEP_DELAY,
+				OSMTracker.Preferences.VAL_VOICEREC_START_BEEP_DELAY,
+				0,
+				MAX_BLUETOOTH_ROUTE_TIMEOUT_MS);
+	}
+
+	public static int getFinalBeepDelay(SharedPreferences preferences) {
+		return getIntPreference(
+				preferences,
+				OSMTracker.Preferences.KEY_VOICEREC_FINAL_BEEP_DELAY,
+				OSMTracker.Preferences.VAL_VOICEREC_FINAL_BEEP_DELAY,
+				0,
+				MAX_FINAL_BEEP_DELAY_MS);
+	}
+
+	public static int getStartBeepVolume(SharedPreferences preferences) {
+		return getIntPreference(
+				preferences,
+				OSMTracker.Preferences.KEY_VOICEREC_START_BEEP_VOLUME,
+				OSMTracker.Preferences.VAL_VOICEREC_START_BEEP_VOLUME,
+				0,
+				100);
+	}
+
+	public static int getFinalBeepVolume(SharedPreferences preferences) {
+		return getIntPreference(
+				preferences,
+				OSMTracker.Preferences.KEY_VOICEREC_FINAL_BEEP_VOLUME,
+				OSMTracker.Preferences.VAL_VOICEREC_FINAL_BEEP_VOLUME,
+				0,
+				100);
+	}
+
 	public static int getStartBeepDelay(SharedPreferences preferences) {
+		return getBluetoothRouteTimeout(preferences);
+	}
+
+	private static int getIntPreference(
+			SharedPreferences preferences, String key, String defaultValue, int min, int max) {
 		try {
-			int delay = Integer.parseInt(preferences.getString(
-					OSMTracker.Preferences.KEY_VOICEREC_START_BEEP_DELAY,
-					OSMTracker.Preferences.VAL_VOICEREC_START_BEEP_DELAY));
-			return Math.max(0, Math.min(MAX_START_BEEP_DELAY_MS, delay));
+			int value = Integer.parseInt(preferences.getString(key, defaultValue));
+			return Math.max(min, Math.min(max, value));
 		} catch (NumberFormatException e) {
-			return Integer.parseInt(OSMTracker.Preferences.VAL_VOICEREC_START_BEEP_DELAY);
+			return Integer.parseInt(defaultValue);
 		}
 	}
 
@@ -231,7 +287,7 @@ public class VoiceAudioRouter {
 			AudioDeviceInfo currentDevice = audioManager.getCommunicationDevice();
 			if (currentDevice != null && isBluetoothDevice(currentDevice)) {
 				audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
-				notifyBluetoothReady(callback);
+				waitForBluetoothRoute(source, callback);
 				return;
 			}
 
@@ -244,7 +300,7 @@ public class VoiceAudioRouter {
 			audioManager.clearCommunicationDevice();
 			audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
 			if (audioManager.setCommunicationDevice(device)) {
-				notifyBluetoothReady(callback);
+				waitForBluetoothRoute(source, callback);
 			} else {
 				handleBluetoothFailure(source, callback);
 			}
@@ -269,6 +325,27 @@ public class VoiceAudioRouter {
 	}
 
 	private void prepareBluetoothSco(String source, Callback callback) {
+		if (bluetoothActive) {
+			boolean frameworkScoOn = false;
+			try {
+				frameworkScoOn = audioManager.isBluetoothScoOn();
+			} catch (RuntimeException e) {
+				Log.w(TAG, "Failed to check Bluetooth SCO", e);
+			}
+			if (VoiceRecordingSequence.canReuseLegacyBluetoothSco(
+					bluetoothActive, frameworkScoOn)) {
+				try {
+					audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+					notifyBluetoothReady(callback);
+					return;
+				} catch (RuntimeException e) {
+					Log.w(TAG, "Failed to reuse Bluetooth SCO", e);
+					bluetoothActive = false;
+				}
+			}
+			bluetoothActive = false;
+		}
+
 		pendingCallback = callback;
 		registerScoReceiver();
 		pendingTimeout = () -> {
@@ -276,7 +353,7 @@ public class VoiceAudioRouter {
 			cancelPending();
 			handleBluetoothFailure(source, callback);
 		};
-		handler.postDelayed(pendingTimeout, BLUETOOTH_SCO_TIMEOUT_MS);
+		handler.postDelayed(pendingTimeout, bluetoothRouteTimeoutMs);
 
 		try {
 			audioManager.setBluetoothScoOn(false);
@@ -403,24 +480,52 @@ public class VoiceAudioRouter {
 		audioFocusHeld = false;
 	}
 
-	private void notifyBluetoothReady(Callback callback) {
-		if (warmUpEnabled || startBeepDelayMs <= 0) {
-			bluetoothActive = true;
-			callback.onReady(true);
-			return;
-		}
-
+	private void waitForBluetoothRoute(String source, Callback callback) {
 		pendingCallback = callback;
-		pendingReady = () -> {
-			Callback readyCallback = pendingCallback;
-			pendingCallback = null;
-			pendingReady = null;
-			bluetoothActive = true;
-			if (readyCallback != null) {
-				readyCallback.onReady(true);
+		long deadline = SystemClock.uptimeMillis() + bluetoothRouteTimeoutMs;
+		pendingReady = new Runnable() {
+			@Override
+			public void run() {
+				if (isBluetoothRouteReady()) {
+					Callback readyCallback = pendingCallback;
+					cancelPending();
+					if (readyCallback != null) {
+						notifyBluetoothReady(readyCallback);
+					}
+					return;
+				}
+
+				if (SystemClock.uptimeMillis() >= deadline) {
+					Callback failedCallback = pendingCallback;
+					cancelPending();
+					if (failedCallback != null) {
+						handleBluetoothFailure(source, failedCallback);
+					}
+					return;
+				}
+
+				handler.postDelayed(this, BLUETOOTH_ROUTE_CHECK_MS);
 			}
 		};
-		handler.postDelayed(pendingReady, startBeepDelayMs);
+		pendingReady.run();
+	}
+
+	private void notifyBluetoothReady(Callback callback) {
+		bluetoothActive = true;
+		callback.onReady(true);
+	}
+
+	private boolean isBluetoothRouteReady() {
+		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+			return bluetoothActive;
+		}
+
+		try {
+			return isBluetoothDevice(audioManager.getCommunicationDevice());
+		} catch (RuntimeException e) {
+			Log.w(TAG, "Failed to check Bluetooth audio route", e);
+			return false;
+		}
 	}
 
 	private void cancelPending() {
@@ -431,6 +536,10 @@ public class VoiceAudioRouter {
 		if (pendingReady != null) {
 			handler.removeCallbacks(pendingReady);
 			pendingReady = null;
+		}
+		if (pendingRelease != null) {
+			handler.removeCallbacks(pendingRelease);
+			pendingRelease = null;
 		}
 		pendingCallback = null;
 
@@ -456,6 +565,9 @@ public class VoiceAudioRouter {
 	}
 
 	private boolean isBluetoothDevice(AudioDeviceInfo device) {
+		if (device == null) {
+			return false;
+		}
 		int type = device.getType();
 		return type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
 				|| type == AudioDeviceInfo.TYPE_BLE_HEADSET;

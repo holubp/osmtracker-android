@@ -71,10 +71,20 @@
     <item>recording</item>
     <item>tracking</item>
   </string-array>
-  <string name="prefs_voicerec_start_beep_delay">Bluetooth start beep delay</string>
-  <string name="prefs_voicerec_start_beep_delay_summary">Wait before playing the start beep after opening Bluetooth headset audio</string>
+  <string name="prefs_voicerec_start_beep_delay">Bluetooth route timeout</string>
+  <string name="prefs_voicerec_start_beep_delay_summary">Maximum wait for Bluetooth headset audio before starting the voice recording</string>
   <string name="prefs_voicerec_start_beep_delay_ms">ms</string>
-  <string name="prefs_voicerec_start_beep_delay_empty">Bluetooth start beep delay cannot be empty</string>
+  <string name="prefs_voicerec_start_beep_delay_empty">Bluetooth route timeout cannot be empty</string>
+  <string name="prefs_voicerec_final_beep_delay">Final beep tail delay</string>
+  <string name="prefs_voicerec_final_beep_delay_summary">Keep recording after the final beep finishes when using a Bluetooth headset</string>
+  <string name="prefs_voicerec_final_beep_delay_empty">Final beep tail delay cannot be empty</string>
+  <string name="prefs_voicerec_beep_volume_percent">%</string>
+  <string name="prefs_voicerec_start_beep_volume">Start beep volume</string>
+  <string name="prefs_voicerec_start_beep_volume_summary">Relative volume for the start beep</string>
+  <string name="prefs_voicerec_start_beep_volume_empty">Start beep volume cannot be empty</string>
+  <string name="prefs_voicerec_final_beep_volume">Final beep volume</string>
+  <string name="prefs_voicerec_final_beep_volume_summary">Relative volume for the final beep</string>
+  <string name="prefs_voicerec_final_beep_volume_empty">Final beep volume cannot be empty</string>
   <string name="prefs_voicerec_buttons">Headset voice button (experimental)</string>
   <string name="prefs_voicerec_buttons_summary">Disabled</string>
   <string name="prefs_voicerec_buttons_dialog_title">Headset voice button</string>

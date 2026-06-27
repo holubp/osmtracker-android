@@ -68,21 +68,50 @@ public class VoiceButtonPreferencesTest {
 	}
 
 	@Test
-	public void startBeepDelayFallsBackWhenInvalid() {
+	public void bluetoothRouteTimeoutFallsBackWhenInvalid() {
 		preferences.edit()
 				.putString(OSMTracker.Preferences.KEY_VOICEREC_START_BEEP_DELAY, "bad")
 				.commit();
 
-		assertEquals(1000, VoiceAudioRouter.getStartBeepDelay(preferences));
+		assertEquals(1000, VoiceAudioRouter.getBluetoothRouteTimeout(preferences));
 	}
 
 	@Test
-	public void startBeepDelayIsClamped() {
+	public void bluetoothRouteTimeoutIsClamped() {
 		preferences.edit()
 				.putString(OSMTracker.Preferences.KEY_VOICEREC_START_BEEP_DELAY, "20000")
 				.commit();
 
-		assertEquals(10000, VoiceAudioRouter.getStartBeepDelay(preferences));
+		assertEquals(10000, VoiceAudioRouter.getBluetoothRouteTimeout(preferences));
+	}
+
+	@Test
+	public void finalBeepDelayFallsBackWhenInvalid() {
+		preferences.edit()
+				.putString(OSMTracker.Preferences.KEY_VOICEREC_FINAL_BEEP_DELAY, "bad")
+				.commit();
+
+		assertEquals(500, VoiceAudioRouter.getFinalBeepDelay(preferences));
+	}
+
+	@Test
+	public void finalBeepDelayIsClamped() {
+		preferences.edit()
+				.putString(OSMTracker.Preferences.KEY_VOICEREC_FINAL_BEEP_DELAY, "20000")
+				.commit();
+
+		assertEquals(5000, VoiceAudioRouter.getFinalBeepDelay(preferences));
+	}
+
+	@Test
+	public void beepVolumesAreClamped() {
+		preferences.edit()
+				.putString(OSMTracker.Preferences.KEY_VOICEREC_START_BEEP_VOLUME, "-1")
+				.putString(OSMTracker.Preferences.KEY_VOICEREC_FINAL_BEEP_VOLUME, "200")
+				.commit();
+
+		assertEquals(0, VoiceAudioRouter.getStartBeepVolume(preferences));
+		assertEquals(100, VoiceAudioRouter.getFinalBeepVolume(preferences));
 	}
 
 	@Test

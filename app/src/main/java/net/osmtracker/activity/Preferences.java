@@ -77,6 +77,27 @@ public class Preferences extends AppCompatActivity {
 					getString(R.string.prefs_voicerec_start_beep_delay_empty),
 					OSMTracker.Preferences.VAL_VOICEREC_START_BEEP_DELAY
 			);
+			setupEditTextNum(
+					OSMTracker.Preferences.KEY_VOICEREC_FINAL_BEEP_DELAY,
+					getString(R.string.prefs_voicerec_start_beep_delay_ms),
+					getString(R.string.prefs_voicerec_final_beep_delay_summary),
+					getString(R.string.prefs_voicerec_final_beep_delay_empty),
+					OSMTracker.Preferences.VAL_VOICEREC_FINAL_BEEP_DELAY
+			);
+			setupEditTextNum(
+					OSMTracker.Preferences.KEY_VOICEREC_START_BEEP_VOLUME,
+					getString(R.string.prefs_voicerec_beep_volume_percent),
+					getString(R.string.prefs_voicerec_start_beep_volume_summary),
+					getString(R.string.prefs_voicerec_start_beep_volume_empty),
+					OSMTracker.Preferences.VAL_VOICEREC_START_BEEP_VOLUME
+			);
+			setupEditTextNum(
+					OSMTracker.Preferences.KEY_VOICEREC_FINAL_BEEP_VOLUME,
+					getString(R.string.prefs_voicerec_beep_volume_percent),
+					getString(R.string.prefs_voicerec_final_beep_volume_summary),
+					getString(R.string.prefs_voicerec_final_beep_volume_empty),
+					OSMTracker.Preferences.VAL_VOICEREC_FINAL_BEEP_VOLUME
+			);
 			setupVoiceButtons(prefs);
 			// Notes
 			setupListPreference(

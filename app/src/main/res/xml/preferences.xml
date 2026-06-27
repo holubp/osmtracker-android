@@ -181,6 +181,24 @@
             app:key="voicerec.start_beep_delay"
             app:summary="@string/prefs_voicerec_start_beep_delay_summary"
             app:title="@string/prefs_voicerec_start_beep_delay" />
+        <EditTextPreference
+            android:inputType="number"
+            app:defaultValue="500"
+            app:key="voicerec.final_beep_delay"
+            app:summary="@string/prefs_voicerec_final_beep_delay_summary"
+            app:title="@string/prefs_voicerec_final_beep_delay" />
+        <EditTextPreference
+            android:inputType="number"
+            app:defaultValue="60"
+            app:key="voicerec.start_beep_volume"
+            app:summary="@string/prefs_voicerec_start_beep_volume_summary"
+            app:title="@string/prefs_voicerec_start_beep_volume" />
+        <EditTextPreference
+            android:inputType="number"
+            app:defaultValue="100"
+            app:key="voicerec.final_beep_volume"
+            app:summary="@string/prefs_voicerec_final_beep_volume_summary"
+            app:title="@string/prefs_voicerec_final_beep_volume" />
         <Preference
             app:key="voicerec.buttons"
             app:summary="@string/prefs_voicerec_buttons_summary"

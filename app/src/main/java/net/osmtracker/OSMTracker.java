@@ -20,6 +20,9 @@ public class OSMTracker {
 		public final static String KEY_VOICEREC_AUDIO_SOURCE = "voicerec.audio_source";
 		public final static String KEY_VOICEREC_AUDIO_FOCUS = "voicerec.audio_focus";
 		public final static String KEY_VOICEREC_START_BEEP_DELAY = "voicerec.start_beep_delay";
+		public final static String KEY_VOICEREC_FINAL_BEEP_DELAY = "voicerec.final_beep_delay";
+		public final static String KEY_VOICEREC_START_BEEP_VOLUME = "voicerec.start_beep_volume";
+		public final static String KEY_VOICEREC_FINAL_BEEP_VOLUME = "voicerec.final_beep_volume";
 		public final static String KEY_VOICEREC_BUTTONS = "voicerec.buttons";
 		public final static String KEY_UI_THEME = "ui.theme";
 		public final static String KEY_GPS_OSSETTINGS = "gps.ossettings";
@@ -69,6 +72,9 @@ public class OSMTracker {
 		public final static String VAL_VOICEREC_AUDIO_FOCUS_TRACKING = "tracking";
 		public final static String VAL_VOICEREC_AUDIO_FOCUS = VAL_VOICEREC_AUDIO_FOCUS_NONE;
 		public final static String VAL_VOICEREC_START_BEEP_DELAY = "1000";
+		public final static String VAL_VOICEREC_FINAL_BEEP_DELAY = "500";
+		public final static String VAL_VOICEREC_START_BEEP_VOLUME = "60";
+		public final static String VAL_VOICEREC_FINAL_BEEP_VOLUME = "100";
 		public final static String VAL_UI_THEME = "net.osmtracker:style/DefaultTheme";
 		public final static boolean VAL_GPS_CHECKSTARTUP = true;
 		public final static boolean VAL_GPS_IGNORE_CLOCK = false;

@@ -10,6 +10,8 @@ import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.media.MediaRecorder;
 import android.media.MediaRecorder.OnInfoListener;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.SystemClock;
 import android.util.Log;
 import android.view.KeyEvent;
@@ -23,6 +25,7 @@ import net.osmtracker.db.DataHelper;
 import net.osmtracker.db.TrackContentProvider.Schema;
 import net.osmtracker.util.VoiceAudioRouter;
 import net.osmtracker.util.VoiceButtonPreferences;
+import net.osmtracker.util.VoiceRecordingSequence;
 
 import java.io.File;
 import java.util.Date;
@@ -31,6 +34,8 @@ import java.util.UUID;
 public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 	
 	private final static String TAG = VoiceRecDialog.class.getSimpleName();
+
+	private final static int FINAL_BEEP_STOP_BUFFER_MS = 1000;
 	
 	/**
 	 * Id of the track the dialog will add this waypoint to
@@ -67,6 +72,8 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 	private boolean isStopping = false;
 
 	private boolean voiceRouteStopped = false;
+
+	private boolean bluetoothRecordingActive = false;
 	
 	/**
 	 * MediaPlayer used to play a short beepbeep when recording starts
@@ -79,6 +86,23 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 	private MediaPlayer mediaPlayerStop = null;
 
 	private boolean playSound = false;
+
+	private int finalBeepDelayMs = Integer.parseInt(
+			OSMTracker.Preferences.VAL_VOICEREC_FINAL_BEEP_DELAY);
+
+	private int startBeepVolume = Integer.parseInt(
+			OSMTracker.Preferences.VAL_VOICEREC_START_BEEP_VOLUME);
+
+	private int finalBeepVolume = Integer.parseInt(
+			OSMTracker.Preferences.VAL_VOICEREC_FINAL_BEEP_VOLUME);
+
+	private final Handler handler = new Handler(Looper.getMainLooper());
+
+	private Runnable recordingTimeout;
+
+	private Runnable stopRecorderAfterFinalBeep;
+
+	private Runnable finalBeepStopFallback;
 	
 	/**
 	 * the context for this dialog
@@ -178,6 +202,9 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 
 				playSound = preferences.getBoolean(OSMTracker.Preferences.KEY_SOUND_ENABLED,
 						OSMTracker.Preferences.VAL_SOUND_ENABLED);
+				finalBeepDelayMs = VoiceAudioRouter.getFinalBeepDelay(preferences);
+				startBeepVolume = VoiceAudioRouter.getStartBeepVolume(preferences);
+				finalBeepVolume = VoiceAudioRouter.getFinalBeepVolume(preferences);
 
 				// Some workaround for record problems
 				unMuteMicrophone();
@@ -232,6 +259,9 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 		safeClose(mediaRecorder, false);
 		safeClose(mediaPlayerStart);
 		safeClose(mediaPlayerStop);
+		cancelRecordingTimeout();
+		cancelStopRecorderAfterFinalBeep();
+		cancelFinalBeepStopFallback();
 		mediaRecorder = null;
 		mediaPlayerStart = null;
 		mediaPlayerStop = null;
@@ -240,6 +270,7 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 		isRecording = false;
 		recorderStarted = false;
 		isStopping = false;
+		bluetoothRecordingActive = false;
 		playSound = false;
 		finishVoiceAudio();
 		
@@ -299,6 +330,16 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 		}
 
 		isStopping = true;
+		cancelRecordingTimeout();
+
+		if (VoiceRecordingSequence.stopsRecorderBeforeFinalBeep(bluetoothRecordingActive)) {
+			stopPhoneRecording();
+		} else {
+			stopBluetoothRecording();
+		}
+	}
+
+	private void stopPhoneRecording() {
 		safeClose(mediaRecorder, recorderStarted);
 		mediaRecorder = null;
 		recorderStarted = false;
@@ -320,11 +361,59 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 		VoiceRecDialog.this.dismiss();
 	}
 
+	private void stopBluetoothRecording() {
+		if (!recorderStarted) {
+			stopRecorder();
+			return;
+		}
+
+		if (mediaPlayerStop != null) {
+			mediaPlayerStop.setOnCompletionListener(mp -> {
+				cancelFinalBeepStopFallback();
+				stopRecorderAfterFinalBeep();
+			});
+			try {
+				mediaPlayerStop.start();
+				scheduleFinalBeepStopFallback();
+				return;
+			} catch (Exception e) {
+				Log.w(TAG, "Failed to play stop sound", e);
+			}
+		}
+
+		stopRecorder();
+	}
+
+	private void stopRecorderAfterFinalBeep() {
+		if (finalBeepDelayMs <= 0) {
+			stopRecorder();
+			return;
+		}
+
+		cancelStopRecorderAfterFinalBeep();
+		stopRecorderAfterFinalBeep = () -> {
+			stopRecorderAfterFinalBeep = null;
+			stopRecorder();
+		};
+		handler.postDelayed(stopRecorderAfterFinalBeep, finalBeepDelayMs);
+	}
+
+	private void stopRecorder() {
+		cancelStopRecorderAfterFinalBeep();
+		cancelFinalBeepStopFallback();
+		safeClose(mediaRecorder, recorderStarted);
+		mediaRecorder = null;
+		recorderStarted = false;
+		finishVoiceAudio();
+		VoiceRecDialog.this.dismiss();
+	}
+
 	private void prepareMediaRecorder(File audioFile, boolean bluetoothActive) {
 		if (!isRecording || isStopping) {
 			return;
 		}
 
+		bluetoothRecordingActive = bluetoothActive;
 		mediaRecorder = new MediaRecorder();
 		try {
 			prepareMediaPlayers(bluetoothActive);
@@ -335,21 +424,35 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 			mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP);
 			mediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB);
 			mediaRecorder.setOutputFile(audioFile.getAbsolutePath());
-			mediaRecorder.setMaxDuration(recordingDuration * 1000);
+			mediaRecorder.setMaxDuration(getMaxRecorderDuration(bluetoothActive));
 			mediaRecorder.setOnInfoListener(this);
 
 			Log.d(TAG, "onStart() preparing mediaRecorder...");
 			mediaRecorder.prepare();
-			playStartSound(() -> startMediaRecorder(audioFile));
+			if (VoiceRecordingSequence.startsRecorderBeforeStartBeep(bluetoothActive)) {
+				if (startMediaRecorder(audioFile)) {
+					playStartSound(null);
+				}
+			} else {
+				playStartSound(() -> startMediaRecorder(audioFile));
+			}
 		} catch (Exception ioe) {
 			Log.w(TAG, "onStart() voice recording has failed", ioe);
 			failRecording();
 		}
 	}
 
-	private void startMediaRecorder(File audioFile) {
+	private int getMaxRecorderDuration(boolean bluetoothActive) {
+		int maxDuration = recordingDuration * 1000;
+		if (bluetoothActive && mediaPlayerStop != null) {
+			maxDuration += getFinalBeepStopDelayMs();
+		}
+		return maxDuration;
+	}
+
+	private boolean startMediaRecorder(File audioFile) {
 		if (!isRecording || isStopping || mediaRecorder == null) {
-			return;
+			return false;
 		}
 
 		try {
@@ -364,22 +467,29 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 			intent.putExtra(OSMTracker.INTENT_KEY_LINK, audioFile.getName());
 			intent.setPackage(getContext().getPackageName());
 			context.sendBroadcast(intent);
+			scheduleRecordingTimeout();
+			return true;
 		} catch (Exception e) {
 			Log.w(TAG, "onStart() voice recording has failed", e);
 			failRecording();
+			return false;
 		}
 	}
 
 	private void playStartSound(Runnable afterSound) {
 		if (mediaPlayerStart == null) {
-			afterSound.run();
+			if (afterSound != null) {
+				afterSound.run();
+			}
 			return;
 		}
 
 		mediaPlayerStart.setOnCompletionListener(mp -> {
 			safeClose(mediaPlayerStart);
 			mediaPlayerStart = null;
-			afterSound.run();
+			if (afterSound != null) {
+				afterSound.run();
+			}
 		});
 		try {
 			mediaPlayerStart.start();
@@ -387,8 +497,68 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 			Log.w(TAG, "Failed to play start sound", e);
 			safeClose(mediaPlayerStart);
 			mediaPlayerStart = null;
-			afterSound.run();
+			if (afterSound != null) {
+				afterSound.run();
+			}
 		}
+	}
+
+	private void scheduleRecordingTimeout() {
+		cancelRecordingTimeout();
+		if (!bluetoothRecordingActive) {
+			return;
+		}
+
+		recordingTimeout = () -> {
+			recordingTimeout = null;
+			stopRecording();
+		};
+		handler.postDelayed(recordingTimeout, recordingDuration * 1000L);
+	}
+
+	private void cancelRecordingTimeout() {
+		if (recordingTimeout == null) {
+			return;
+		}
+		handler.removeCallbacks(recordingTimeout);
+		recordingTimeout = null;
+	}
+
+	private void cancelStopRecorderAfterFinalBeep() {
+		if (stopRecorderAfterFinalBeep == null) {
+			return;
+		}
+		handler.removeCallbacks(stopRecorderAfterFinalBeep);
+		stopRecorderAfterFinalBeep = null;
+	}
+
+	private void scheduleFinalBeepStopFallback() {
+		cancelFinalBeepStopFallback();
+		if (mediaPlayerStop == null) {
+			return;
+		}
+
+		finalBeepStopFallback = () -> {
+			finalBeepStopFallback = null;
+			stopRecorder();
+		};
+		handler.postDelayed(finalBeepStopFallback, getFinalBeepStopDelayMs());
+	}
+
+	private int getFinalBeepStopDelayMs() {
+		int finalBeepDurationMs = mediaPlayerStop == null
+				? 0
+				: Math.max(0, mediaPlayerStop.getDuration());
+		return VoiceRecordingSequence.getFinalBeepStopDelayMs(
+				finalBeepDurationMs, finalBeepDelayMs, FINAL_BEEP_STOP_BUFFER_MS);
+	}
+
+	private void cancelFinalBeepStopFallback() {
+		if (finalBeepStopFallback == null) {
+			return;
+		}
+		handler.removeCallbacks(finalBeepStopFallback);
+		finalBeepStopFallback = null;
 	}
 
 	private void failRecording() {
@@ -412,11 +582,11 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 			return;
 		}
 
-		mediaPlayerStart = createSoundPlayer(R.raw.beepbeep, bluetoothActive);
-		mediaPlayerStop = createSoundPlayer(R.raw.beep, bluetoothActive);
+		mediaPlayerStart = createSoundPlayer(R.raw.beepbeep, bluetoothActive, startBeepVolume);
+		mediaPlayerStop = createSoundPlayer(R.raw.beep, bluetoothActive, finalBeepVolume);
 	}
 
-	private MediaPlayer createSoundPlayer(int resId, boolean bluetoothActive) {
+	private MediaPlayer createSoundPlayer(int resId, boolean bluetoothActive, int volume) {
 		MediaPlayer mediaPlayer = new MediaPlayer();
 		AssetFileDescriptor afd = null;
 		try {
@@ -426,9 +596,8 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener{
 					: AudioManager.STREAM_MUSIC);
 			mediaPlayer.setDataSource(afd.getFileDescriptor(), afd.getStartOffset(), afd.getLength());
 			mediaPlayer.setLooping(false);
-			if (resId == R.raw.beepbeep) {
-				mediaPlayer.setVolume(0.6f, 0.6f);
-			}
+			float relativeVolume = volume / 100f;
+			mediaPlayer.setVolume(relativeVolume, relativeVolume);
 			mediaPlayer.prepare();
 			return mediaPlayer;
 		} catch (Exception e) {

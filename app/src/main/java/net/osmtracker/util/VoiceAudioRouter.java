@@ -123,13 +123,15 @@ public class VoiceAudioRouter {
 		}
 
 		if (!hasBluetoothPermission()) {
-			handleBluetoothFailure(source, callback);
+			handleBluetoothFailure(source, callback,
+					"Bluetooth voice recording permission is not granted");
 			return;
 		}
 
 		if (usesAudioFocus() && !requestVoiceAudioFocus()) {
 			Log.w(TAG, "Could not obtain Bluetooth voice audio focus");
-			handleBluetoothFailure(source, callback);
+			handleBluetoothFailure(source, callback,
+					"Bluetooth voice audio focus was not granted");
 			return;
 		}
 
@@ -284,29 +286,12 @@ public class VoiceAudioRouter {
 
 	private void prepareCommunicationDevice(String source, Callback callback) {
 		try {
-			AudioDeviceInfo currentDevice = audioManager.getCommunicationDevice();
-			if (currentDevice != null && isBluetoothDevice(currentDevice)) {
-				audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
-				waitForBluetoothRoute(source, callback);
-				return;
-			}
-
-			AudioDeviceInfo device = findBluetoothCommunicationDevice();
-			if (device == null) {
-				handleBluetoothFailure(source, callback);
-				return;
-			}
-
-			audioManager.clearCommunicationDevice();
 			audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
-			if (audioManager.setCommunicationDevice(device)) {
-				waitForBluetoothRoute(source, callback);
-			} else {
-				handleBluetoothFailure(source, callback);
-			}
+			waitForCommunicationDevice(source, callback);
 		} catch (RuntimeException e) {
 			Log.w(TAG, "Failed to prepare Bluetooth communication device", e);
-			handleBluetoothFailure(source, callback);
+			handleBluetoothFailure(source, callback,
+					"Bluetooth communication device preparation failed");
 		}
 	}
 
@@ -480,26 +465,49 @@ public class VoiceAudioRouter {
 		audioFocusHeld = false;
 	}
 
-	private void waitForBluetoothRoute(String source, Callback callback) {
+	private void waitForCommunicationDevice(String source, Callback callback) {
 		pendingCallback = callback;
 		long deadline = SystemClock.uptimeMillis() + bluetoothRouteTimeoutMs;
 		pendingReady = new Runnable() {
+			private boolean deviceSelected;
+			private boolean deviceSelectionFailed;
+
 			@Override
 			public void run() {
-				if (isBluetoothRouteReady()) {
-					Callback readyCallback = pendingCallback;
-					cancelPending();
-					if (readyCallback != null) {
-						notifyBluetoothReady(readyCallback);
+				try {
+					if (isBluetoothRouteReady()) {
+						Callback readyCallback = pendingCallback;
+						cancelPending();
+						if (readyCallback != null) {
+							notifyBluetoothReady(readyCallback);
+						}
+						return;
 					}
-					return;
+
+					if (!deviceSelected) {
+						AudioDeviceInfo device = findBluetoothCommunicationDevice();
+						if (device != null) {
+							audioManager.clearCommunicationDevice();
+							audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+							deviceSelected = audioManager.setCommunicationDevice(device);
+							if (!deviceSelected && !deviceSelectionFailed) {
+								deviceSelectionFailed = true;
+								Log.w(TAG, "Failed to select Bluetooth communication device: "
+										+ describeCommunicationDevices());
+							}
+						}
+					}
+				} catch (RuntimeException e) {
+					Log.w(TAG, "Failed while waiting for Bluetooth communication device", e);
 				}
 
 				if (SystemClock.uptimeMillis() >= deadline) {
 					Callback failedCallback = pendingCallback;
 					cancelPending();
 					if (failedCallback != null) {
-						handleBluetoothFailure(source, failedCallback);
+						handleBluetoothFailure(source, failedCallback,
+								"Timed out waiting for Bluetooth communication device: "
+										+ describeCommunicationDevices());
 					}
 					return;
 				}
@@ -554,6 +562,13 @@ public class VoiceAudioRouter {
 	}
 
 	private void handleBluetoothFailure(String source, Callback callback) {
+		handleBluetoothFailure(source, callback, null);
+	}
+
+	private void handleBluetoothFailure(String source, Callback callback, String reason) {
+		if (reason != null) {
+			Log.w(TAG, reason);
+		}
 		bluetoothActive = false;
 		clearAudioRoute();
 		abandonVoiceAudioFocus();
@@ -562,6 +577,38 @@ public class VoiceAudioRouter {
 		} else {
 			callback.onReady(false);
 		}
+	}
+
+	private String describeCommunicationDevices() {
+		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+			return "legacy SCO route";
+		}
+
+		try {
+			StringBuilder builder = new StringBuilder();
+			builder.append("current=");
+			appendAudioDevice(builder, audioManager.getCommunicationDevice());
+			builder.append(", available=");
+			List<AudioDeviceInfo> devices = audioManager.getAvailableCommunicationDevices();
+			for (int i = 0; i < devices.size(); i++) {
+				if (i > 0) {
+					builder.append('|');
+				}
+				appendAudioDevice(builder, devices.get(i));
+			}
+			return builder.toString();
+		} catch (RuntimeException e) {
+			return "failed to inspect communication devices";
+		}
+	}
+
+	private void appendAudioDevice(StringBuilder builder, AudioDeviceInfo device) {
+		if (device == null) {
+			builder.append("none");
+			return;
+		}
+		builder.append("type=").append(device.getType());
+		builder.append(",bt=").append(isBluetoothDevice(device));
 	}
 
 	private boolean isBluetoothDevice(AudioDeviceInfo device) {

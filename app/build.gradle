@@ -81,6 +81,12 @@ tasks.register("unitTestClasses") {
     dependsOn "compileDebugUnitTestSources"
 }
 
+tasks.register("androidTestClasses") {
+    group = "build"
+    description = "Compatibility task for IDEs that request generic Android test classes."
+    dependsOn "compileDebugAndroidTestSources"
+}
+
 dependencies {
     // Lib to show OSM map as background
     implementation 'org.osmdroid:osmdroid-android:6.1.20'

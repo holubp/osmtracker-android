@@ -1,5 +1,6 @@
 package net.osmtracker.view;
 
+import android.app.Activity;
 import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -20,6 +21,9 @@ import android.os.Looper;
 import android.os.SystemClock;
 import android.util.Log;
 import android.view.KeyEvent;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.Button;
 import android.widget.Toast;
 
 import androidx.preference.PreferenceManager;
@@ -254,10 +258,37 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener {
 
 		super.onStart();
 
-		android.widget.Button stopButton = getButton(DialogInterface.BUTTON_NEGATIVE);
+		Button stopButton = getButton(DialogInterface.BUTTON_NEGATIVE);
 		if (stopButton != null) {
 			stopButton.setOnClickListener(v -> stopRecording());
+			sizeStopButton(stopButton);
 		}
+	}
+
+	private void sizeStopButton(Button stopButton) {
+		Activity activity = getOwnerActivity();
+		if (activity == null && context instanceof Activity) {
+			activity = (Activity) context;
+		}
+		if (activity == null) {
+			return;
+		}
+
+		View appContent = activity.findViewById(android.R.id.content);
+		if (appContent == null) {
+			return;
+		}
+		appContent.post(() -> {
+			if (!isShowing() || appContent.getHeight() <= 0) {
+				return;
+			}
+			int minimumHeight = appContent.getHeight() / 4;
+			ViewGroup.LayoutParams layoutParams = stopButton.getLayoutParams();
+			layoutParams.width = ViewGroup.LayoutParams.MATCH_PARENT;
+			layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+			stopButton.setMinimumHeight(minimumHeight);
+			stopButton.setLayoutParams(layoutParams);
+		});
 	}
 	
 	@Override

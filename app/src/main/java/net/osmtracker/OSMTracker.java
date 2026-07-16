@@ -73,8 +73,8 @@ public class OSMTracker {
 		public final static String VAL_VOICEREC_AUDIO_FOCUS = VAL_VOICEREC_AUDIO_FOCUS_NONE;
 		public final static String VAL_VOICEREC_START_BEEP_DELAY = "1000";
 		public final static String VAL_VOICEREC_FINAL_BEEP_DELAY = "500";
-		public final static String VAL_VOICEREC_START_BEEP_VOLUME = "60";
-		public final static String VAL_VOICEREC_FINAL_BEEP_VOLUME = "100";
+		public final static String VAL_VOICEREC_START_BEEP_VOLUME = "100";
+		public final static String VAL_VOICEREC_FINAL_BEEP_VOLUME = "60";
 		public final static String VAL_UI_THEME = "net.osmtracker:style/DefaultTheme";
 		public final static boolean VAL_GPS_CHECKSTARTUP = true;
 		public final static boolean VAL_GPS_IGNORE_CLOCK = false;

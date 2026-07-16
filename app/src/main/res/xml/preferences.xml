@@ -189,13 +189,13 @@
             app:title="@string/prefs_voicerec_final_beep_delay" />
         <EditTextPreference
             android:inputType="number"
-            app:defaultValue="60"
+            app:defaultValue="100"
             app:key="voicerec.start_beep_volume"
             app:summary="@string/prefs_voicerec_start_beep_volume_summary"
             app:title="@string/prefs_voicerec_start_beep_volume" />
         <EditTextPreference
             android:inputType="number"
-            app:defaultValue="100"
+            app:defaultValue="60"
             app:key="voicerec.final_beep_volume"
             app:summary="@string/prefs_voicerec_final_beep_volume_summary"
             app:title="@string/prefs_voicerec_final_beep_volume" />

@@ -362,19 +362,25 @@ public class TrackLogger extends Activity {
 			Toast.makeText(this, R.string.tracklogger_waiting_gps, Toast.LENGTH_LONG).show();
 		}
 
-		if (!VoiceButtonPreferences.getKeyCodes(prefs).isEmpty()) {
+		//save the layout file name if it change, in tags array
+		String layoutName = CustomLayoutsUtils.getCurrentLayoutName(getApplicationContext());
+		layoutNameTags.add(layoutName);
+
+		super.onResume();
+	}
+
+	@Override
+	protected void onStart() {
+		super.onStart();
+
+		if (!VoiceButtonPreferences.getKeyCodes(prefs).isEmpty()
+				&& voiceButtonMediaSession == null) {
 			MediaButtonReceiver.setActiveListener(this::handleVoiceButton);
 			voiceButtonMediaSession = new VoiceButtonMediaSession(
 					this, "OSMTracker voice button", this::handleVoiceButton);
 			voiceButtonMediaSession.start();
 		}
 		voiceAudioRouter.startTracking(prefs);
-
-		//save the layout file name if it change, in tags array
-		String layoutName = CustomLayoutsUtils.getCurrentLayoutName(getApplicationContext());
-		layoutNameTags.add(layoutName);
-
-		super.onResume();
 	}
 
 	private void checkGPSProvider() {
@@ -424,6 +430,15 @@ public class TrackLogger extends Activity {
 			pressureListener.unregister();
 		}
 
+		super.onPause();
+	}
+
+	@Override
+	protected void onStop() {
+		if (voiceRecDialog != null && voiceRecDialog.isRecording()) {
+			voiceRecDialog.interruptRecordingImmediately();
+		}
+
 		MediaButtonReceiver.setActiveListener(null);
 		if (voiceButtonMediaSession != null) {
 			voiceButtonMediaSession.stop();
@@ -431,7 +446,7 @@ public class TrackLogger extends Activity {
 		}
 		voiceAudioRouter.stopTracking();
 
-		super.onPause();
+		super.onStop();
 	}
 
 	@Override

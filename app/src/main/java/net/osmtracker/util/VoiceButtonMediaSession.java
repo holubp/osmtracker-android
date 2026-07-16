@@ -6,6 +6,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
+import android.os.Build;
 import android.view.KeyEvent;
 
 import net.osmtracker.receiver.MediaButtonReceiver;
@@ -13,16 +14,21 @@ import net.osmtracker.receiver.MediaButtonReceiver;
 public class VoiceButtonMediaSession {
 
 	private final MediaSession mediaSession;
+	private boolean stopped;
 
 	public VoiceButtonMediaSession(Context context, String tag,
 								   MediaButtonReceiver.MediaButtonListener listener) {
 		mediaSession = new MediaSession(context.getApplicationContext(), tag);
-		mediaSession.setMediaButtonReceiver(PendingIntent.getBroadcast(
-				context.getApplicationContext(),
-				0,
-				new Intent(Intent.ACTION_MEDIA_BUTTON)
-						.setComponent(new ComponentName(context, MediaButtonReceiver.class)),
-				PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE));
+		ComponentName mediaButtonReceiver = new ComponentName(context, MediaButtonReceiver.class);
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+			mediaSession.setMediaButtonBroadcastReceiver(mediaButtonReceiver);
+		} else {
+			mediaSession.setMediaButtonReceiver(PendingIntent.getBroadcast(
+					context.getApplicationContext(),
+					0,
+					new Intent(Intent.ACTION_MEDIA_BUTTON).setComponent(mediaButtonReceiver),
+					PendingIntent.FLAG_UPDATE_CURRENT));
+		}
 		mediaSession.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS
 				| MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
 		mediaSession.setCallback(new MediaSession.Callback() {
@@ -78,10 +84,17 @@ public class VoiceButtonMediaSession {
 	}
 
 	public void start() {
+		if (stopped) {
+			return;
+		}
 		mediaSession.setActive(true);
 	}
 
 	public void stop() {
+		if (stopped) {
+			return;
+		}
+		stopped = true;
 		mediaSession.setActive(false);
 		mediaSession.release();
 	}

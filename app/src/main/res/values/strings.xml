@@ -139,6 +139,7 @@
   <string name="error_create_track_dir">Unable to create track folder %s</string>
   <string name="error_externalstorage_not_writable_hint">Please check if ext. storage is correctly inserted and mounted.</string>
   <string name="error_voicerec_failed">Voice recording has failed</string>
+  <string name="tracklogger_voicerec_interrupted">Voice recording interrupted</string>
   <string name="error_userlayout_parsing">Error while parsing XML layout file. Please revert to default layout.</string>
   <string name="error_gh_token_lenght">Token must be 40 characters</string>
   <string name="error_gh_pr_creation">Error while creating the PR</string>

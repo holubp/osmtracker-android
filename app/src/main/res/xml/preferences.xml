@@ -177,7 +177,7 @@
             app:title="@string/prefs_voicerec_audio_focus" />
         <EditTextPreference
             android:inputType="number"
-            app:defaultValue="1000"
+            app:defaultValue="3000"
             app:key="voicerec.start_beep_delay"
             app:summary="@string/prefs_voicerec_start_beep_delay_summary"
             app:title="@string/prefs_voicerec_start_beep_delay" />

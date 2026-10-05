@@ -230,6 +230,10 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener {
 							VoiceAudioRouter.getBluetoothRouteTimeout(preferences);
 
 					audioSource = VoiceAudioRouter.getAudioSource(preferences);
+					Log.i(TAG, "Voice recording attempt: generation=" + recordingGeneration
+							+ ", source=" + audioSource + ", soundEnabled=" + playSound
+							+ ", startVolume=" + startBeepVolume + ", finalVolume=" + finalBeepVolume
+							+ ", timeoutMs=" + bluetoothRouteTimeoutMs + ", tailMs=" + finalBeepDelayMs);
 					long bluetoothRouteDeadline =
 							SystemClock.uptimeMillis() + bluetoothRouteTimeoutMs;
 					voiceAudioRouter.prepareForRecording(audioSource, new VoiceAudioRouter.Callback() {
@@ -541,6 +545,7 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener {
 			@Override
 			public void onFailed() {
 				if (isCurrentRecording(generation)) {
+					logCueState("final skipped: route revalidation failed", mediaPlayerStop);
 					stopRecorder(interrupted);
 				}
 			}
@@ -549,6 +554,7 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener {
 
 	private void playFinalCue(boolean interrupted) {
 		if (mediaPlayerStop == null) {
+			logCueState("final skipped: player unavailable", null);
 			stopRecorder(interrupted);
 			return;
 		}
@@ -559,6 +565,7 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener {
 				return;
 			}
 			cancelFinalBeepStopFallback();
+			logCueState("final completed", mp);
 			if (interrupted) {
 				playInterruptionAcknowledgement();
 			} else {
@@ -570,11 +577,14 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener {
 				return true;
 			}
 			cancelFinalBeepStopFallback();
+			Log.w(TAG, "Final cue error: what=" + what + ", extra=" + extra);
+			logCueState("final failed", mp);
 			stopRecorder(interrupted);
 			return true;
 		});
 		try {
 			mediaPlayerStop.start();
+			logCueState("final started", mediaPlayerStop);
 			scheduleFinalBeepStopFallback(interrupted);
 		} catch (Exception e) {
 			Log.w(TAG, "Failed to play stop sound", e);
@@ -730,9 +740,11 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener {
 						|| !recorderStarted || mediaRecorder == null || isStopping) {
 					return;
 				}
+				AudioDeviceInfo device = null;
 				try {
-					AudioDeviceInfo device = mediaRecorder.getRoutedDevice();
+					device = mediaRecorder.getRoutedDevice();
 					if (isBluetoothDevice(device)) {
+						Log.i(TAG, "Bluetooth capture verified: " + describeAudioDevice(device));
 						bluetoothCaptureVerified = true;
 						bluetoothRecordingDeviceId = device.getId();
 						bluetoothRouteVerification = null;
@@ -743,6 +755,7 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener {
 					Log.w(TAG, "Could not verify the Bluetooth recording route", e);
 				}
 				if (SystemClock.uptimeMillis() >= deadline) {
+					Log.w(TAG, "Bluetooth capture verification timed out: " + describeAudioDevice(device));
 					bluetoothRouteVerification = null;
 					failRecording();
 					return;
@@ -767,6 +780,9 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener {
 			@Override
 			public void onFailed() {
 				// Recording continues without a cue when Bluetooth output cannot be confirmed.
+				if (isCurrentRecording(generation)) {
+					logCueState("start skipped: route revalidation failed", mediaPlayerStart);
+				}
 			}
 		});
 	}
@@ -784,6 +800,7 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener {
 	private void playStartSound(Runnable afterSound) {
 		MediaPlayer player = mediaPlayerStart;
 		if (player == null) {
+			logCueState("start skipped: player unavailable", null);
 			if (afterSound != null) {
 				afterSound.run();
 			}
@@ -792,6 +809,7 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener {
 		long generation = recordingGeneration;
 
 		player.setOnCompletionListener(mp -> {
+			logCueState("start completed", mp);
 			safeClose(mp);
 			if (mediaPlayerStart == mp) {
 				mediaPlayerStart = null;
@@ -801,6 +819,8 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener {
 			}
 		});
 		player.setOnErrorListener((mp, what, extra) -> {
+			Log.w(TAG, "Start cue error: what=" + what + ", extra=" + extra);
+			logCueState("start failed", mp);
 			safeClose(mp);
 			if (mediaPlayerStart == mp) {
 				mediaPlayerStart = null;
@@ -812,6 +832,7 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener {
 		});
 		try {
 			player.start();
+			logCueState("start started", player);
 		} catch (Exception e) {
 			Log.w(TAG, "Failed to play start sound", e);
 			safeClose(player);
@@ -1001,6 +1022,29 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener {
 		voiceAudioRouter.finishRecording();
 	}
 
+	private static String describeAudioDevice(AudioDeviceInfo device) {
+		return device == null ? "none" : "id=" + device.getId() + ",type=" + device.getType();
+	}
+
+	private void logCueState(String event, MediaPlayer player) {
+		try {
+			AudioManager audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+			int stream = bluetoothRecordingActive ? AudioManager.STREAM_VOICE_CALL : AudioManager.STREAM_MUSIC;
+			String communicationDevice = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+					? describeAudioDevice(audioManager.getCommunicationDevice()) : "legacy";
+			Log.i(TAG, "Cue " + event + ": generation=" + recordingGeneration
+					+ ", output=" + describeAudioDevice(player == null ? null : player.getRoutedDevice())
+					+ ", preferred=" + describeAudioDevice(player == null ? null : player.getPreferredDevice())
+					+ ", communication=" + communicationDevice + ", mode=" + audioManager.getMode()
+					+ ", stream=" + stream + ", volume=" + audioManager.getStreamVolume(stream)
+					+ "/" + audioManager.getStreamMaxVolume(stream)
+					+ ", muted=" + audioManager.isStreamMute(stream)
+					+ ", scoOn=" + audioManager.isBluetoothScoOn());
+		} catch (RuntimeException e) {
+			Log.w(TAG, "Could not inspect cue " + event, e);
+		}
+	}
+
 	private void prepareMediaPlayers(boolean bluetoothActive) {
 		if (!playSound) {
 			return;
@@ -1012,8 +1056,15 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener {
 
 	private MediaPlayer createSoundPlayer(int resId, boolean bluetoothActive, int volume) {
 		MediaPlayer mediaPlayer = new MediaPlayer();
+		String cue = resId == R.raw.beepbeep ? "start" : "final";
+		long generation = recordingGeneration;
 		AssetFileDescriptor afd = null;
 		try {
+			mediaPlayer.addOnRoutingChangedListener(router -> {
+				if (isCurrentRecording(generation)) {
+					logCueState(cue + " output changed", mediaPlayer);
+				}
+			}, handler);
 			afd = context.getResources().openRawResourceFd(resId);
 			mediaPlayer.setAudioAttributes(new AudioAttributes.Builder()
 					.setUsage(bluetoothActive ? AudioAttributes.USAGE_VOICE_COMMUNICATION
@@ -1033,9 +1084,10 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener {
 			float relativeVolume = volume / 100f;
 			mediaPlayer.setVolume(relativeVolume, relativeVolume);
 			mediaPlayer.prepare();
+			logCueState(cue + " prepared", mediaPlayer);
 			return mediaPlayer;
 		} catch (Exception e) {
-			Log.w(TAG, "Failed to prepare sound player", e);
+			Log.w(TAG, "Failed to prepare " + cue + " sound player", e);
 			safeClose(mediaPlayer);
 			return null;
 		} finally {

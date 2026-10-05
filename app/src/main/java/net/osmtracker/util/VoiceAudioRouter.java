@@ -68,9 +68,11 @@ public class VoiceAudioRouter {
 	private boolean recordingLease;
 	private boolean releaseWhenRecordingFinished;
 	private long operationGeneration;
+	private long preparationStarted;
 	private long pendingGeneration;
 	private final AudioManager.OnAudioFocusChangeListener audioFocusChangeListener =
 			focusChange -> {
+				Log.i(TAG, "Audio focus changed: " + focusChange);
 				if (focusChange == AudioManager.AUDIOFOCUS_GAIN) {
 					audioFocusHeld = true;
 				} else if (focusChange == AudioManager.AUDIOFOCUS_LOSS) {
@@ -149,6 +151,10 @@ public class VoiceAudioRouter {
 	private void prepareForRecording(
 			String source, Callback callback, boolean acquireRecordingLease) {
 		long generation = beginOperation();
+		preparationStarted = SystemClock.uptimeMillis();
+		Log.i(TAG, "Preparing voice route: operation=" + generation
+				+ ", source=" + source + ", timeoutMs=" + bluetoothRouteTimeoutMs
+				+ ", focus=" + audioFocusMode);
 
 		if (!isBluetoothSource(source)) {
 			bluetoothActive = false;
@@ -191,14 +197,18 @@ public class VoiceAudioRouter {
 			return;
 		}
 		if (!isCommunicationModeReady()) {
+			Log.w(TAG, "Cue skipped: communication mode is not ready");
 			callback.onFailed();
 			return;
 		}
 		if (usesAudioFocus() && !requestVoiceAudioFocus()) {
+			Log.w(TAG, "Cue skipped: audio focus was not granted");
 			callback.onFailed();
 			return;
 		}
 		if (!isBluetoothRouteReady()) {
+			Log.w(TAG, "Cue skipped: Bluetooth route is not ready: "
+					+ describeCommunicationDevices());
 			callback.onFailed();
 			return;
 		}
@@ -663,6 +673,9 @@ public class VoiceAudioRouter {
 			return;
 		}
 		bluetoothActive = true;
+		Log.i(TAG, "Bluetooth route ready: operation=" + generation
+				+ ", elapsedMs=" + (SystemClock.uptimeMillis() - preparationStarted)
+				+ ", " + describeCommunicationDevices());
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
 			try {
 				AudioDeviceInfo device = audioManager.getCommunicationDevice();
@@ -809,7 +822,8 @@ public class VoiceAudioRouter {
 			return;
 		}
 		if (reason != null) {
-			Log.w(TAG, reason);
+			Log.w(TAG, reason + ": operation=" + generation
+					+ ", elapsedMs=" + (SystemClock.uptimeMillis() - preparationStarted));
 		}
 		bluetoothActive = false;
 		recordingLease = false;
@@ -909,7 +923,8 @@ public class VoiceAudioRouter {
 			builder.append("none");
 			return;
 		}
-		builder.append("type=").append(device.getType());
+		builder.append("id=").append(device.getId());
+		builder.append(",type=").append(device.getType());
 		builder.append(",bt=").append(isBluetoothDevice(device));
 	}
 

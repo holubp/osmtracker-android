@@ -71,7 +71,7 @@ public class OSMTracker {
 		public final static String VAL_VOICEREC_AUDIO_FOCUS_RECORDING = "recording";
 		public final static String VAL_VOICEREC_AUDIO_FOCUS_TRACKING = "tracking";
 		public final static String VAL_VOICEREC_AUDIO_FOCUS = VAL_VOICEREC_AUDIO_FOCUS_NONE;
-		public final static String VAL_VOICEREC_START_BEEP_DELAY = "1000";
+		public final static String VAL_VOICEREC_START_BEEP_DELAY = "3000";
 		public final static String VAL_VOICEREC_FINAL_BEEP_DELAY = "500";
 		public final static String VAL_VOICEREC_START_BEEP_VOLUME = "100";
 		public final static String VAL_VOICEREC_FINAL_BEEP_VOLUME = "60";

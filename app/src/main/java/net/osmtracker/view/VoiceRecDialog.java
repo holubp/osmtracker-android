@@ -1060,11 +1060,6 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener {
 		long generation = recordingGeneration;
 		AssetFileDescriptor afd = null;
 		try {
-			mediaPlayer.addOnRoutingChangedListener(router -> {
-				if (isCurrentRecording(generation)) {
-					logCueState(cue + " output changed", mediaPlayer);
-				}
-			}, handler);
 			afd = context.getResources().openRawResourceFd(resId);
 			mediaPlayer.setAudioAttributes(new AudioAttributes.Builder()
 					.setUsage(bluetoothActive ? AudioAttributes.USAGE_VOICE_COMMUNICATION
@@ -1072,6 +1067,13 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener {
 					.setContentType(bluetoothActive ? AudioAttributes.CONTENT_TYPE_SPEECH
 							: AudioAttributes.CONTENT_TYPE_MUSIC)
 					.build());
+			// Device selection and routing callbacks require an initialized native player.
+			mediaPlayer.setDataSource(afd.getFileDescriptor(), afd.getStartOffset(), afd.getLength());
+			mediaPlayer.addOnRoutingChangedListener(router -> {
+				if (isCurrentRecording(generation)) {
+					logCueState(cue + " output changed", mediaPlayer);
+				}
+			}, handler);
 			if (bluetoothActive && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
 				AudioManager audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
 				AudioDeviceInfo device = audioManager.getCommunicationDevice();
@@ -1079,7 +1081,6 @@ public class VoiceRecDialog extends ProgressDialog implements OnInfoListener {
 					throw new IllegalStateException("Bluetooth cue output is not available");
 				}
 			}
-			mediaPlayer.setDataSource(afd.getFileDescriptor(), afd.getStartOffset(), afd.getLength());
 			mediaPlayer.setLooping(false);
 			float relativeVolume = volume / 100f;
 			mediaPlayer.setVolume(relativeVolume, relativeVolume);
